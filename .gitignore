@@ -1,0 +1,11 @@
+# Ignored Files
+.DS_Store
+node_modules/
+dist/
+build/
+*.log
+/data/
+*.db
+*.db-wal
+*.db-shm
+.env
