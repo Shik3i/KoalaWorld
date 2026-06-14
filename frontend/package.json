@@ -1,0 +1,27 @@
+{
+  "name": "koalaworld",
+  "version": "1.0.0",
+  "description": "KoalaWorld is a self-hosted 3D geo-visualization service...",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shik3i/KoalaWorld.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Shik3i/KoalaWorld/issues"
+  },
+  "homepage": "https://github.com/Shik3i/KoalaWorld#readme"
+}
