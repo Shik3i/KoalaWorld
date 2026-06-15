@@ -83,6 +83,7 @@ type openMeteoResponse struct {
 
 func (p *WeatherPlugin) Fetch(ctx context.Context) ([]EventRecord, error) {
 	var events []EventRecord
+	now := time.Now().UTC().Format(time.RFC3339)
 
 	for _, city := range worldCities {
 		url := fmt.Sprintf(
@@ -101,14 +102,16 @@ func (p *WeatherPlugin) Fetch(ctx context.Context) ([]EventRecord, error) {
 			continue
 		}
 
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			log.Printf("Weather API error for %s: %d %s", city.Name, resp.StatusCode, string(bodyBytes))
+			continue
+		}
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			log.Printf("Weather read error for %s: %v", city.Name, err)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("Weather API error for %s: %d", city.Name, resp.StatusCode)
 			continue
 		}
 
@@ -140,7 +143,7 @@ func (p *WeatherPlugin) Fetch(ctx context.Context) ([]EventRecord, error) {
 			Latitude:   city.Lat,
 			Longitude:  city.Lon,
 			Magnitude:  &mag,
-			Timestamp:  time.Now().UTC().Format(time.RFC3339),
+			Timestamp:  now,
 			Metadata:   string(metaJSON),
 		})
 	}

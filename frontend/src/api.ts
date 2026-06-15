@@ -1,5 +1,3 @@
-const BASE_URL = '/api';
-
 async function get<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(path, window.location.origin);
   if (params) {

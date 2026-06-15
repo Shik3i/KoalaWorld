@@ -15,8 +15,11 @@ function latLngToPosition(lat: number, lng: number): THREE.Vector3 {
 export async function createCountryBorders(): Promise<THREE.Group> {
   const group = new THREE.Group();
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
-    const res = await fetch('https://unpkg.com/world-atlas@2/countries-110m.json');
+    const res = await fetch('https://unpkg.com/world-atlas@2/countries-110m.json', { signal: controller.signal });
+    clearTimeout(timeoutId);
     const topology = await res.json();
     const countries = topojson.feature(topology, topology.objects.countries) as any;
 
@@ -45,6 +48,7 @@ export async function createCountryBorders(): Promise<THREE.Group> {
     const lines = new THREE.LineSegments(geo, mat);
     group.add(lines);
   } catch {
+    clearTimeout(timeoutId);
     console.warn('Failed to load country borders');
   }
 

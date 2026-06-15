@@ -1,7 +1,7 @@
 # KoalaWorld Caddy Configuration
 # Replace the domain with your actual domain in production.
 
-:8080 {
+:80 {
     # Security headers
     header {
         X-Content-Type-Options "nosniff"
@@ -9,6 +9,9 @@
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; connect-src 'self'"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
     }
 
     # Compress responses

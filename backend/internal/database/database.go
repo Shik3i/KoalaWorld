@@ -60,6 +60,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("enable WAL: %w", err)
 	}
 
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
+
 	// Enable foreign keys.
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)

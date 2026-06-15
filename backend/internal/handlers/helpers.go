@@ -13,7 +13,9 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 		"data":   data,
 	}
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 // writeError sends an error envelope with the given status code and message.

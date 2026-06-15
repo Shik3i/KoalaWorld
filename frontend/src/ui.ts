@@ -49,6 +49,7 @@ export function createLayerUI(
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = ctrl.visible;
+    checkbox.setAttribute('aria-label', `Toggle ${ctrl.label} layer`);
     checkbox.addEventListener('change', () => onToggle(ctrl.id, checkbox.checked));
 
     label.appendChild(checkbox);
@@ -62,7 +63,7 @@ export function createLayerUI(
 export function createPopup(): { show: (event: GeoEvent, x: number, y: number) => void; hide: () => void } {
   const el = document.createElement('div');
   el.style.cssText = `
-    position: absolute;
+    position: fixed;
     display: none;
     background: rgba(0,0,0,0.85);
     color: #fff;
@@ -75,6 +76,7 @@ export function createPopup(): { show: (event: GeoEvent, x: number, y: number) =
     pointer-events: none;
     max-width: 280px;
     border: 1px solid rgba(255,255,255,0.15);
+    touch-action: none;
   `;
   document.body.appendChild(el);
 
@@ -138,6 +140,8 @@ export function createFilterUI(
     user-select: none;
     min-width: 200px;
   `;
+  container.setAttribute('role', 'region');
+  container.setAttribute('aria-label', 'Event filters');
 
   const title = document.createElement('div');
   title.textContent = 'Filters';

@@ -35,7 +35,10 @@ func (h *LayersHandler) RefreshLayers(w http.ResponseWriter, r *http.Request) {
 
 	// Body is optional; parse errors are ignored (default to empty).
 	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid JSON body")
+			return
+		}
 	}
 
 	layerNames := req.Layers

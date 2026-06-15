@@ -165,7 +165,7 @@ func (s *Scheduler) syncOne(ctx context.Context, plugin FeedPlugin) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := s.db.Exec("UPDATE layers SET last_sync_at = ? WHERE type = ?", now, string(plugin.Type())); err != nil {
+	if err := s.db.UpsertLayer(string(plugin.Type()), true, &now); err != nil {
 		log.Printf("Failed to update sync time for %s: %v", plugin.Name(), err)
 	}
 

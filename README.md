@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Shik3i/KoalaWorld/actions/workflows/ci.yml/badge.svg)](https://github.com/Shik3i/KoalaWorld/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/Shik3i/KoalaWorld)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Shik3i/KoalaWorld)](backend/go.mod)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Shik3i/KoalaWorld?filename=backend%2Fgo.mod)](backend/go.mod)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Self-hosted 3D geo-visualization service** — Go backend + SQLite, Three.js/Vite frontend. Visualize earthquakes, wildfires, and weather data on an interactive 3D globe.

@@ -85,7 +85,7 @@ const popup = createPopup();
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
-renderer.domElement.addEventListener('click', (event) => {
+function onGlobeClick(event: MouseEvent) {
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -128,7 +128,9 @@ renderer.domElement.addEventListener('click', (event) => {
     }
   }
   popup.hide();
-});
+}
+
+renderer.domElement.addEventListener('click', onGlobeClick);
 
 createCountryBorders().then(group => {
   bordersGroup = group;
@@ -181,7 +183,7 @@ async function fetchAndDisplayEarthquakes() {
 }
 
 fetchAndDisplayEarthquakes();
-setInterval(fetchAndDisplayEarthquakes, 30000);
+const earthquakeInterval = setInterval(fetchAndDisplayEarthquakes, 30000);
 
 function animate() {
   requestAnimationFrame(animate);
@@ -209,12 +211,18 @@ async function refreshAdminStatus() {
   } catch {}
 }
 refreshAdminStatus();
-setInterval(refreshAdminStatus, 60000);
+const adminInterval = setInterval(refreshAdminStatus, 60000);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+export function dispose() {
+  renderer.domElement.removeEventListener('click', onGlobeClick);
+  clearInterval(earthquakeInterval);
+  clearInterval(adminInterval);
+}
 
 animate();

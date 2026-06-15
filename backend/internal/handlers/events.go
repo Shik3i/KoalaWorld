@@ -42,6 +42,19 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	minMag := r.URL.Query().Get("min_mag")
 	maxMag := r.URL.Query().Get("max_mag")
 
+	if minMag != "" {
+		if _, err := strconv.ParseFloat(minMag, 64); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid min_mag value")
+			return
+		}
+	}
+	if maxMag != "" {
+		if _, err := strconv.ParseFloat(maxMag, 64); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid max_mag value")
+			return
+		}
+	}
+
 	// Parse bbox
 	var bbox []float64
 	bboxStr := r.URL.Query().Get("bbox")
