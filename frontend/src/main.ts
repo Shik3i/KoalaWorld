@@ -216,7 +216,7 @@ function createModeSelector(): HTMLElement {
       currentMode = (btn as HTMLElement).dataset.mode as DataMode;
       const countEl = document.getElementById('kw-live-count');
       if (countEl) countEl.style.display = currentMode === 'live' ? 'flex' : 'none';
-      fetchAndDisplayEarthquakes();
+      fetchAllLayers();
     });
   });
 
@@ -225,7 +225,7 @@ function createModeSelector(): HTMLElement {
   if (select) {
     select.addEventListener('change', () => {
       liveCount = parseInt(select.value);
-      fetchAndDisplayEarthquakes();
+      fetchAllLayers();
     });
   }
 
@@ -244,11 +244,11 @@ const sidebarCallbacks: SidebarCallbacks = {
   onLayerToggle,
   onFilterApply: (filters) => {
     Object.assign(filterState, filters);
-    fetchAndDisplayEarthquakes();
+    fetchAllLayers();
   },
   onFilterReset: () => {
     Object.assign(filterState, { query: '', minMag: '', maxMag: '', dateFrom: '', dateTo: '' });
-    fetchAndDisplayEarthquakes();
+    fetchAllLayers();
   },
 };
 
@@ -756,11 +756,16 @@ async function fetchAndDisplayMarine() {
   }
 }
 
-fetchAndDisplayWildfires();
-fetchAndDisplayWeather();
-fetchAndDisplayAirQuality();
-fetchAndDisplayISS();
-fetchAndDisplayMarine();
+function fetchAllLayers() {
+  fetchAndDisplayEarthquakes();
+  fetchAndDisplayWildfires();
+  fetchAndDisplayWeather();
+  fetchAndDisplayAirQuality();
+  fetchAndDisplayISS();
+  fetchAndDisplayMarine();
+}
+
+fetchAllLayers();
 const wildfireInterval = setInterval(fetchAndDisplayWildfires, 5 * 60 * 1000);
 const weatherInterval = setInterval(fetchAndDisplayWeather, 5 * 60 * 1000);
 const airQualityInterval = setInterval(fetchAndDisplayAirQuality, 5 * 60 * 1000);
