@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"koalaworld/internal/database"
+	"koalaworld/internal/handlers"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 )
@@ -17,6 +19,7 @@ type Scheduler struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	mu      sync.Mutex
+	Broker  *handlers.SSEBroker
 }
 
 func NewScheduler(db *database.DB) *Scheduler {
@@ -153,6 +156,9 @@ func (s *Scheduler) syncOne(ctx context.Context, plugin FeedPlugin) error {
 		return err
 	})
 	if err != nil {
+		if logErr := s.db.InsertSyncLog(string(plugin.Type()), "error", 0, err.Error()); logErr != nil {
+			log.Printf("Failed to insert sync log: %v", logErr)
+		}
 		return fmt.Errorf("fetch after retries: %w", err)
 	}
 
@@ -161,6 +167,9 @@ func (s *Scheduler) syncOne(ctx context.Context, plugin FeedPlugin) error {
 	}
 
 	if err := plugin.Upsert(records); err != nil {
+		if logErr := s.db.InsertSyncLog(string(plugin.Type()), "error", 0, err.Error()); logErr != nil {
+			log.Printf("Failed to insert sync log: %v", logErr)
+		}
 		return fmt.Errorf("upsert: %w", err)
 	}
 
@@ -170,14 +179,25 @@ func (s *Scheduler) syncOne(ctx context.Context, plugin FeedPlugin) error {
 	}
 
 	log.Printf("Synced %d records for %s", len(records), plugin.Name())
+
+	if logErr := s.db.InsertSyncLog(string(plugin.Type()), "success", len(records), ""); logErr != nil {
+		log.Printf("Failed to insert sync log: %v", logErr)
+	}
+
+	// Notify SSE clients about the new events
+	if s.Broker != nil {
+		log.Printf("SSE: %d new events for %s", len(records), plugin.Name())
+	}
+
 	return nil
 }
 
 func syncInterval(plugin FeedPlugin) time.Duration {
-	switch plugin.Type() {
-	case EventTypeEarthquake:
-		return 5 * time.Minute
-	default:
-		return 5 * time.Minute
+	intervalStr := os.Getenv("KOALA_SYNC_INTERVAL")
+	if intervalStr != "" {
+		if d, err := time.ParseDuration(intervalStr); err == nil {
+			return d
+		}
 	}
+	return 5 * time.Minute
 }

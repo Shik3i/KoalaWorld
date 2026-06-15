@@ -55,6 +55,8 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	searchQuery := r.URL.Query().Get("q")
+
 	// Parse bbox
 	var bbox []float64
 	bboxStr := r.URL.Query().Get("bbox")
@@ -81,7 +83,7 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, err := h.DB.GetEvents(typeFilter, limit, from, to, bbox, minMag, maxMag)
+	events, err := h.DB.GetEvents(typeFilter, limit, from, to, bbox, minMag, maxMag, searchQuery)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch events")
 		return

@@ -15,7 +15,12 @@ import (
 	"time"
 )
 
-const firmsBaseURL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+var firmsBaseURL = func() string {
+	if v := os.Getenv("KOALA_FIRMS_URL"); v != "" {
+		return v
+	}
+	return "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+}()
 
 type WildfirePlugin struct {
 	db     *database.DB
@@ -27,7 +32,14 @@ func NewWildfirePlugin(db *database.DB) *WildfirePlugin {
 	return &WildfirePlugin{
 		db:     db,
 		apiKey: os.Getenv("FIRMS_API_KEY"),
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: func() time.Duration {
+				if v := os.Getenv("KOALA_HTTP_TIMEOUT"); v != "" {
+					if d, err := time.ParseDuration(v); err == nil {
+						return d
+					}
+				}
+				return 30 * time.Second
+			}()},
 	}
 }
 

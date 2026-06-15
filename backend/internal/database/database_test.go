@@ -62,7 +62,7 @@ func TestUpsertAndGetEvents(t *testing.T) {
 	}
 
 	// Read back
-	events, err := db.GetEvents("earthquake", 10, "", "", nil, "", "")
+	events, err := db.GetEvents("earthquake", 10, "", "", nil, "", "", "")
 	if err != nil {
 		t.Fatalf("GetEvents() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestUpsertAndGetEvents(t *testing.T) {
 	if err := db.UpsertEvent(evt); err != nil {
 		t.Fatalf("UpsertEvent() update error = %v", err)
 	}
-	events, _ = db.GetEvents("earthquake", 10, "", "", nil, "", "")
+	events, _ = db.GetEvents("earthquake", 10, "", "", nil, "", "", "")
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event after upsert, got %d", len(events))
 	}
@@ -121,13 +121,13 @@ func TestGetEventsFilters(t *testing.T) {
 	}
 
 	// Test type filter
-	eqs, _ := db.GetEvents("earthquake", 100, "", "", nil, "", "")
+	eqs, _ := db.GetEvents("earthquake", 100, "", "", nil, "", "", "")
 	if len(eqs) != 3 {
 		t.Errorf("expected 3 earthquakes, got %d", len(eqs))
 	}
 
 	// Test limit
-	limited, _ := db.GetEvents("", 2, "", "", nil, "", "")
+	limited, _ := db.GetEvents("", 2, "", "", nil, "", "", "")
 	if len(limited) > 2 {
 		t.Errorf("expected at most 2 events, got %d", len(limited))
 	}
@@ -135,19 +135,19 @@ func TestGetEventsFilters(t *testing.T) {
 	// Test time range
 	from := "2024-06-01T00:00:00Z"
 	to := "2024-12-31T23:59:59Z"
-	timeFiltered, _ := db.GetEvents("", 100, from, to, nil, "", "")
+	timeFiltered, _ := db.GetEvents("", 100, from, to, nil, "", "", "")
 	if len(timeFiltered) != 2 {
 		t.Errorf("expected 2 events in time range, got %d", len(timeFiltered))
 	}
 
 	// Test bbox
-	bboxFiltered, _ := db.GetEvents("", 100, "", "", []float64{15, 5, 35, 25}, "", "")
+	bboxFiltered, _ := db.GetEvents("", 100, "", "", []float64{15, 5, 35, 25}, "", "", "")
 	if len(bboxFiltered) != 3 {
 		t.Errorf("expected 3 events in bbox, got %d", len(bboxFiltered))
 	}
 
 	// Test magnitude filter
-	magFiltered, _ := db.GetEvents("earthquake", 100, "", "", nil, "4.0", "6.0")
+	magFiltered, _ := db.GetEvents("earthquake", 100, "", "", nil, "4.0", "6.0", "")
 	if len(magFiltered) != 1 {
 		t.Errorf("expected 1 event with mag 4-6, got %d", len(magFiltered))
 	}
@@ -174,7 +174,7 @@ func TestBatchUpsertEvents(t *testing.T) {
 		t.Fatalf("BatchUpsertEvents() error = %v", err)
 	}
 
-	result, _ := db.GetEvents("earthquake", 100, "", "", nil, "", "")
+	result, _ := db.GetEvents("earthquake", 100, "", "", nil, "", "", "")
 	if len(result) != 2 {
 		t.Errorf("expected 2 batched events, got %d", len(result))
 	}

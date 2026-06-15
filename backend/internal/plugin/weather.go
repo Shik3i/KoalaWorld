@@ -8,6 +8,7 @@ import (
 	"koalaworld/internal/database"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -58,7 +59,14 @@ type WeatherPlugin struct {
 func NewWeatherPlugin(db *database.DB) *WeatherPlugin {
 	return &WeatherPlugin{
 		db:     db,
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: func() time.Duration {
+				if v := os.Getenv("KOALA_HTTP_TIMEOUT"); v != "" {
+					if d, err := time.ParseDuration(v); err == nil {
+						return d
+					}
+				}
+				return 30 * time.Second
+			}()},
 	}
 }
 

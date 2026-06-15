@@ -1,0 +1,271 @@
+openapi: "3.0.3"
+info:
+  title: KoalaWorld API
+  description: Self-hosted 3D geo-visualization service API
+  version: "1.0.0"
+  contact:
+    name: KoalaWorld
+    url: https://github.com/Shik3i/KoalaWorld
+
+servers:
+  - url: /api/v1
+    description: API v1 (preferred)
+  - url: /api
+    description: Legacy API
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  data:
+                    type: string
+                    example: healthy
+
+  /config:
+    get:
+      summary: Get configuration
+      operationId: getConfig
+      responses:
+        "200":
+          description: Configuration with layer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      layers:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Layer"
+
+  /layers:
+    get:
+      summary: List all layers
+      operationId: getLayers
+      responses:
+        "200":
+          description: List of layers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Layer"
+
+  /layers/{type}:
+    patch:
+      summary: Update a layer
+      operationId: updateLayer
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Layer updated
+
+  /layers/refresh:
+    post:
+      summary: Trigger feed refresh for layers
+      operationId: refreshLayers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                layers:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Sync initiated
+
+  /events:
+    get:
+      summary: List events with optional filters
+      operationId: getEvents
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: min_mag
+          in: query
+          schema:
+            type: number
+        - name: max_mag
+          in: query
+          schema:
+            type: number
+        - name: bbox
+          in: query
+          schema:
+            type: string
+            description: "min_lon,min_lat,max_lon,max_lat"
+        - name: q
+          in: query
+          schema:
+            type: string
+            description: "Search in metadata"
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+
+  /events/stream:
+    get:
+      summary: Server-Sent Events stream for real-time event updates
+      operationId: eventStream
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /admin/logs:
+    get:
+      summary: Get sync logs
+      operationId: getSyncLogs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of sync logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncLog"
+
+components:
+  schemas:
+    Layer:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        enabled:
+          type: boolean
+        last_sync:
+          type: string
+          nullable: true
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        source:
+          type: string
+        external_id:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        magnitude:
+          type: number
+          nullable: true
+        depth_km:
+          type: number
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+
+    SyncLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        layer_type:
+          type: string
+        status:
+          type: string
+          enum: ["success", "error"]
+        records_count:
+          type: integer
+        error_message:
+          type: string
+        started_at:
+          type: string
+        finished_at:
+          type: string

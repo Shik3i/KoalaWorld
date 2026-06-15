@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# KoalaWorld pre-commit hook — runs verification before every commit.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+echo "=== KoalaWorld pre-commit ==="
+
+# Backend
+echo "→ Running go vet..."
+(cd backend && go vet ./...) || exit 1
+
+echo "→ Running Go tests..."
+(cd backend && go test ./... -count=1 -race) || exit 1
+
+echo "→ Building Go..."
+(cd backend && go build ./...) || exit 1
+
+# Frontend
+echo "→ Running TypeScript type check..."
+(cd frontend && npm run typecheck) || exit 1
+
+echo "→ Building frontend..."
+(cd frontend && npm run build) || exit 1
+
+echo "=== All checks passed ==="

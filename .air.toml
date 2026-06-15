@@ -1,0 +1,35 @@
+# Air configuration for Go hot reload during development.
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  cmd = "cd backend && go build -o ./tmp/koalaworld ./cmd/koalaworld"
+  bin = "backend/tmp/koalaworld"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "frontend/node_modules", "frontend/dist", "data", "web"]
+  exclude_file = []
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = false
+  follow_symlink = false
+  full_bin = "backend/tmp/koalaworld"
+  include_dir = ["backend"]
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  kill_delay = "0s"
+  log = "build-errors.log"
+  send_interrupt = true
+  stop_on_error = true
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  time = false
+
+[misc]
+  clean_on_exit = true

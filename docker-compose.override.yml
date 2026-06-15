@@ -1,0 +1,14 @@
+services:
+  koalaworld:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./data:/app/data
+    environment:
+      - KOALA_DB_PATH=/app/data/koalaworld.db
+      - KOALA_PORT=8080
+      - KOALA_SYNC_INTERVAL=1m
+    ports:
+      - "8080:8080"

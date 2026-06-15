@@ -6,7 +6,7 @@ import { createEarthquakeMarkers } from './layers/earthquake';
 import { createGridLayer } from './layers/grid_layer';
 import { createCountryBorders } from './layers/country_borders';
 import { createHeatmapTexture, createHeatmapOverlay } from './layers/heatmap';
-import { createLayerUI, createPopup, createFilterUI, createThemeToggle, applyTheme, createAdminPanel } from './ui';
+import { createLayerUI, createPopup, createFilterUI, createThemeToggle, applyTheme, createAdminPanel, createLoadingIndicator, createOfflineBanner, createAPIStatusMonitor, createEventModal, createTimelineSlider } from './ui';
 import type { LayerControl, FilterState } from './ui';
 import type { GeoEvent } from './types';
 
@@ -19,6 +19,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.domElement.setAttribute('tabindex', '0');
 document.body.appendChild(renderer.domElement);
 
 const textureLoader = new THREE.TextureLoader();
@@ -27,12 +28,56 @@ createGlobe(scene, textureLoader);
 const gridGroup = createGridLayer();
 scene.add(gridGroup);
 
-camera.position.z = 5;
+// Intro animation: start far away and zoom in
+camera.position.z = 15;
+
+let introAnimation: number | null = null;
+function startIntroAnimation() {
+  const startZ = 15;
+  const endZ = 5;
+  const duration = 2000;
+  const startTime = performance.now();
+
+  function animateIntro(time: number) {
+    const elapsed = time - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    camera.position.z = startZ + (endZ - startZ) * eased;
+    controls.update();
+
+    if (progress < 1) {
+      introAnimation = requestAnimationFrame(animateIntro);
+    }
+  }
+  introAnimation = requestAnimationFrame(animateIntro);
+}
+startIntroAnimation();
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.minDistance = 3;
 controls.maxDistance = 15;
+
+// Touch gesture zones for quick camera actions
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 3) {
+    camera.position.set(0, 0, 5);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  }
+});
+
+function rotateGlobeTo(lat: number, lng: number) {
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = (lng + 180) * Math.PI / 180;
+  const radius = 5;
+  camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+  camera.position.y = radius * Math.cos(phi);
+  camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+void rotateGlobeTo;
 
 let markersGroup: THREE.Group | null = null;
 let bordersGroup: THREE.Group | null = null;
@@ -81,7 +126,17 @@ createThemeToggle(savedTheme, (theme) => {
   applyTheme(theme);
 });
 
+// Timeline slider
+const timelineSlider = createTimelineSlider('2024-01-01T00:00:00Z', new Date().toISOString(), (from, to) => {
+  filterState.dateFrom = from.slice(0, 10);
+  filterState.dateTo = to.slice(0, 10);
+  fetchAndDisplayEarthquakes();
+});
+document.body.appendChild(timelineSlider);
+
 const popup = createPopup();
+const loading = createLoadingIndicator();
+const modal = createEventModal();
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -132,6 +187,40 @@ function onGlobeClick(event: MouseEvent) {
 
 renderer.domElement.addEventListener('click', onGlobeClick);
 
+renderer.domElement.addEventListener('dblclick', (e) => {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  if (markersGroup) {
+    const meshes: THREE.Mesh[] = [];
+    markersGroup.traverse((child) => { if (child instanceof THREE.Mesh) meshes.push(child); });
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+      let closest: GeoEvent | null = null;
+      let minDist = Infinity;
+      const hit = intersects[0];
+      let hitPos = new THREE.Vector3();
+      if (hit.object instanceof THREE.InstancedMesh && hit.instanceId !== undefined) {
+        const matrix = new THREE.Matrix4();
+        hit.object.getMatrixAt(hit.instanceId, matrix);
+        hitPos.setFromMatrixPosition(matrix);
+      } else if (hit.object instanceof THREE.Mesh) {
+        hitPos.copy(hit.object.position);
+      }
+      for (const ev of latestEvents) {
+        const phi = (90 - ev.latitude) * Math.PI / 180;
+        const theta = (ev.longitude + 180) * Math.PI / 180;
+        const ex = -2.01 * Math.sin(phi) * Math.cos(theta);
+        const ey = 2.01 * Math.cos(phi);
+        const ez = 2.01 * Math.sin(phi) * Math.sin(theta);
+        const d = hitPos.distanceTo(new THREE.Vector3(ex, ey, ez));
+        if (d < minDist) { minDist = d; closest = ev; }
+      }
+      if (closest) modal.show(closest);
+    }
+  }
+});
+
 createCountryBorders().then(group => {
   bordersGroup = group;
   scene.add(group);
@@ -139,6 +228,7 @@ createCountryBorders().then(group => {
 
 async function fetchAndDisplayEarthquakes() {
   try {
+    loading.show();
     const params: Record<string, string> = { type: 'earthquake', limit: '200' };
     if (filterState.minMag) params.min_mag = filterState.minMag;
     if (filterState.maxMag) params.max_mag = filterState.maxMag;
@@ -177,8 +267,10 @@ async function fetchAndDisplayEarthquakes() {
       heatmapGroup.visible = layerControls.find(c => c.id === 'heatmap')?.visible ?? false;
       scene.add(heatmapGroup);
     }
+    loading.hide();
   } catch {
     console.warn('Failed to fetch earthquake data – API may not be available yet');
+    loading.hide();
   }
 }
 
@@ -190,6 +282,14 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
+
+// Backend offline detection
+const offlineBanner = createOfflineBanner();
+const monitor = createAPIStatusMonitor(
+  () => { offlineBanner.style.display = 'none'; },
+  () => { offlineBanner.style.display = 'block'; }
+);
+monitor.start();
 
 // Admin status
 const adminPanel = createAdminPanel(() => {
@@ -220,9 +320,11 @@ window.addEventListener('resize', () => {
 });
 
 export function dispose() {
+  if (introAnimation) cancelAnimationFrame(introAnimation);
   renderer.domElement.removeEventListener('click', onGlobeClick);
   clearInterval(earthquakeInterval);
   clearInterval(adminInterval);
+  monitor.stop();
 }
 
 animate();

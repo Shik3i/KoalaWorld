@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -112,6 +113,16 @@ func migrate(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 	CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_events_coordinates ON events(latitude, longitude);
+
+	CREATE TABLE IF NOT EXISTS sync_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		layer_type TEXT NOT NULL,
+		status TEXT NOT NULL CHECK(status IN ('success', 'error')),
+		records_count INTEGER DEFAULT 0,
+		error_message TEXT,
+		started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ')),
+		finished_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ'))
+	);
 	`
 
 	_, err := db.Exec(schema)
@@ -125,7 +136,55 @@ func seed(db *sql.DB) error {
 		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('wildfire', 0);
 		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('weather', 0);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	if os.Getenv("KOALA_DEV_SEED") == "true" {
+		if err := seedDevData(db); err != nil {
+			log.Printf("Dev seed warning: %v", err)
+		}
+	}
+	return nil
+}
+
+func seedDevData(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM events").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	events := []struct {
+		extID     string
+		lat, lon  float64
+		mag       float64
+		depth     float64
+		timestamp time.Time
+		place     string
+	}{
+		{"dev-eq-001", 35.68, 139.65, 5.5, 10.0, now.Add(-1 * time.Hour), "Test Tokyo"},
+		{"dev-eq-002", 34.05, -118.24, 3.2, 5.0, now.Add(-2 * time.Hour), "Test Los Angeles"},
+		{"dev-eq-003", -33.86, 151.21, 4.1, 8.0, now.Add(-3 * time.Hour), "Test Sydney"},
+		{"dev-eq-004", 48.85, 2.35, 2.8, 3.0, now.Add(-4 * time.Hour), "Test Paris"},
+		{"dev-eq-005", 19.43, -99.13, 6.2, 15.0, now.Add(-5 * time.Hour), "Test Mexico City"},
+	}
+
+	for _, e := range events {
+		meta := map[string]string{"place": e.place}
+		metaJSON, _ := json.Marshal(meta)
+		_, err := db.Exec(`
+			INSERT OR IGNORE INTO events (type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata)
+			VALUES ('earthquake', 'dev-seed', ?, ?, ?, ?, ?, ?, ?)
+		`, e.extID, e.lat, e.lon, e.mag, e.depth, e.timestamp.Format(time.RFC3339), string(metaJSON))
+		if err != nil {
+			return err
+		}
+	}
+	log.Printf("Dev seed: inserted %d sample events", len(events))
+	return nil
 }
 
 // GetLayers returns all rows from the layers table.
@@ -240,7 +299,8 @@ func (db *DB) UpsertEvent(e Event) error {
 //   - bbox: [minLon, minLat, maxLon, maxLat] for spatial filtering.
 //   - minMag: minimum magnitude (inclusive).
 //   - maxMag: maximum magnitude (inclusive).
-func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []float64, minMag, maxMag string) ([]Event, error) {
+//   - searchQuery: if non-empty, filters by metadata LIKE pattern.
+func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []float64, minMag, maxMag, searchQuery string) ([]Event, error) {
 	query := "SELECT id, type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata, updated_at, created_at FROM events"
 	var conditions []string
 	var args []interface{}
@@ -276,6 +336,11 @@ func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []fl
 		} else {
 			log.Printf("Invalid max_mag value: %q", maxMag)
 		}
+	}
+
+	if searchQuery != "" {
+		conditions = append(conditions, "metadata LIKE ?")
+		args = append(args, "%"+searchQuery+"%")
 	}
 
 	if len(conditions) > 0 {
@@ -322,6 +387,55 @@ func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []fl
 		events = []Event{}
 	}
 	return events, nil
+}
+
+// InsertSyncLog inserts a row into the sync_logs table.
+func (db *DB) InsertSyncLog(layerType, status string, recordsCount int, errorMsg string) error {
+	_, err := db.Exec(`
+		INSERT INTO sync_logs (layer_type, status, records_count, error_message)
+		VALUES (?, ?, ?, ?)
+	`, layerType, status, recordsCount, errorMsg)
+	return err
+}
+
+// SyncLog represents a row in the sync_logs table.
+type SyncLog struct {
+	ID           int    `json:"id"`
+	LayerType    string `json:"layer_type"`
+	Status       string `json:"status"`
+	RecordsCount int    `json:"records_count"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	StartedAt    string `json:"started_at"`
+	FinishedAt   string `json:"finished_at"`
+}
+
+// GetSyncLogs returns the most recent sync log entries, ordered by id DESC.
+func (db *DB) GetSyncLogs(limit int) ([]SyncLog, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	query := fmt.Sprintf("SELECT id, layer_type, status, records_count, COALESCE(error_message, ''), started_at, finished_at FROM sync_logs ORDER BY id DESC LIMIT %d", limit)
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []SyncLog
+	for rows.Next() {
+		var l SyncLog
+		if err := rows.Scan(&l.ID, &l.LayerType, &l.Status, &l.RecordsCount, &l.ErrorMessage, &l.StartedAt, &l.FinishedAt); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if logs == nil {
+		logs = []SyncLog{}
+	}
+	return logs, nil
 }
 
 // Close shuts down the database connection.

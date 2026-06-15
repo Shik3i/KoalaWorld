@@ -9,13 +9,26 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"time"
 )
 
-const usgsURL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
+var usgsURL = func() string {
+	if v := os.Getenv("KOALA_USGS_URL"); v != "" {
+		return v
+	}
+	return "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
+}()
 
 var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout: func() time.Duration {
+		if v := os.Getenv("KOALA_HTTP_TIMEOUT"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				return d
+			}
+		}
+		return 30 * time.Second
+	}(),
 }
 
 type geoJSONFeatureCollection struct {
