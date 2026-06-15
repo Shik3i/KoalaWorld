@@ -20,6 +20,9 @@ WORKDIR /app
 COPY --from=backend-builder --chown=koala:koala /koalaworld .
 COPY --from=frontend-builder --chown=koala:koala /app/frontend/dist ./web
 
+# Ensure data directory exists and is writable by non-root user
+RUN mkdir -p /app/data && chown koala:koala /app/data
+
 USER koala
 EXPOSE 8080
 VOLUME /app/data

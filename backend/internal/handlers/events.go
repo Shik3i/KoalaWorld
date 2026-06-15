@@ -19,11 +19,13 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract optional type from path: /api/events/{type}
-	// Path is either /api/events or /api/events/{type}
+	// Supports both /api/events/{type} and /api/v1/events/{type}
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	var typeFilter string
-	if len(pathParts) == 3 && pathParts[2] != "" {
-		typeFilter = pathParts[2]
+	lastPart := pathParts[len(pathParts)-1]
+	// The last part is the type if it's not "events" (meaning the path ends with /events)
+	if lastPart != "" && lastPart != "events" {
+		typeFilter = lastPart
 	} else {
 		typeFilter = r.URL.Query().Get("type")
 	}

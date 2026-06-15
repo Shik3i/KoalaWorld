@@ -116,8 +116,9 @@ func main() {
 	fs := http.FileServer(http.Dir("web"))
 	mux.Handle("/", fs)
 
-	// Apply middleware: outermost is Logging, then Timing.
-	h := middleware.Logging(middleware.Timing(mux))
+	// Apply middleware: outermost is Logging, then Timing, then RateLimit.
+	rateLimiter := middleware.NewRateLimit(100, time.Second)
+	h := middleware.Logging(rateLimiter.Middleware(middleware.Timing(mux)))
 
 	port := os.Getenv("KOALA_PORT")
 	if port == "" {
