@@ -206,6 +206,12 @@ html, body {
   transform: translateX(16px);
 }
 
+.kw-toggle-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ---- Checkbox ---- */
 
 .kw-checkbox {
@@ -330,9 +336,9 @@ html, body {
 
 .kw-sidebar-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  top: 12px;
+  left: 12px;
+  max-height: calc(100vh - 130px);
   z-index: var(--kw-z-sidebar);
   display: flex;
   pointer-events: none;
@@ -706,6 +712,7 @@ html, body {
     left: 0;
     right: 0;
     height: auto;
+    max-height: none;
     flex-direction: column;
   }
 
@@ -738,6 +745,24 @@ html, body {
 
   .kw-theme-grid {
     grid-template-columns: repeat(4, 1fr);
+  }
+
+  .kw-mag-legend {
+    bottom: 138px;
+  }
+
+  .mc-container {
+    top: auto;
+    bottom: 16px;
+    right: 14px;
+    transform: none;
+    flex-direction: row;
+    gap: 6px;
+    border-radius: 20px;
+  }
+
+  .mc-btn::after {
+    display: none;
   }
 }
 

@@ -107,13 +107,17 @@
   /* Z-index layers */
   --kw-z-sidebar: 100;
   --kw-z-map-controls: 110;
+  --kw-z-legend: 115;
   --kw-z-mode-bar: 120;
-  --kw-z-legend: 125;
-  --kw-z-event-panel: 130;
-  --kw-z-info-panel: 140;
+  --kw-z-admin: 130;
+  --kw-z-event-panel-toggle: 140;
+  --kw-z-event-panel: 145;
+  --kw-z-info-panel: 150;
+  --kw-z-loading: 500;
   --kw-z-overlay: 200;
   --kw-z-modal: 300;
   --kw-z-tooltip: 400;
+  --kw-z-banner: 999;
 
   /* Backdrop blur */
   --kw-blur: blur(20px) saturate(180%);

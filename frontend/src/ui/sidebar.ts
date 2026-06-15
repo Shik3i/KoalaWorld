@@ -185,46 +185,59 @@ export function createSidebar(
   layersTitle.textContent = 'Layers';
   layersSection.appendChild(layersTitle);
 
-  for (const layer of layers) {
-    const toggle = document.createElement('label');
-    toggle.className = 'kw-toggle';
-
-    const track = document.createElement('span');
-    track.className = 'kw-toggle-track';
-    if (layer.visible) track.classList.add('active');
-
-    const thumb = document.createElement('span');
-    thumb.className = 'kw-toggle-thumb';
-    track.appendChild(thumb);
-    toggle.appendChild(track);
-
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'kw-toggle-label';
-    labelSpan.textContent = layer.label;
-    toggle.appendChild(labelSpan);
-
-    if (layer.count !== undefined) {
-      const badge = document.createElement('span');
-      badge.className = 'kw-badge';
-      if (layer.count >= 7) badge.classList.add('kw-badge-high');
-      else if (layer.count >= 4) badge.classList.add('kw-badge-medium');
-      else badge.classList.add('kw-badge-low');
-      badge.textContent = String(layer.count);
-      toggle.appendChild(badge);
+  function buildLayerToggles(): void {
+    while (layersSection.children.length > 1) {
+      layersSection.removeChild(layersSection.lastChild!);
     }
 
-    toggle.addEventListener('click', () => {
-      const newVisible = !track.classList.contains('active');
-      if (newVisible) {
-        track.classList.add('active');
-      } else {
-        track.classList.remove('active');
-      }
-      callbacks.onLayerToggle(layer.id, newVisible);
-    });
+    for (const layer of layers) {
+      const toggle = document.createElement('label');
+      toggle.className = 'kw-toggle';
+      if (layer.count === 0) toggle.classList.add('kw-toggle-disabled');
 
-    layersSection.appendChild(toggle);
+      const track = document.createElement('span');
+      track.className = 'kw-toggle-track';
+      if (layer.visible) track.classList.add('active');
+
+      const thumb = document.createElement('span');
+      thumb.className = 'kw-toggle-thumb';
+      track.appendChild(thumb);
+      toggle.appendChild(track);
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'kw-toggle-label';
+      labelSpan.textContent = layer.label + (layer.count === 0 ? ' (no data)' : '');
+      toggle.appendChild(labelSpan);
+
+      if (layer.count !== undefined && layer.count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'kw-badge';
+        if (layer.count >= 100) badge.classList.add('kw-badge-high');
+        else if (layer.count >= 10) badge.classList.add('kw-badge-medium');
+        else badge.classList.add('kw-badge-low');
+        badge.textContent = String(layer.count);
+        toggle.appendChild(badge);
+      }
+
+      if (layer.count === 0) {
+        toggle.addEventListener('click', (e) => e.preventDefault());
+      } else {
+        toggle.addEventListener('click', () => {
+          const newVisible = !track.classList.contains('active');
+          if (newVisible) {
+            track.classList.add('active');
+          } else {
+            track.classList.remove('active');
+          }
+          callbacks.onLayerToggle(layer.id, newVisible);
+        });
+      }
+
+      layersSection.appendChild(toggle);
+    }
   }
+
+  buildLayerToggles();
   content.appendChild(layersSection);
 
   const divider2 = document.createElement('div');
@@ -493,6 +506,9 @@ export function createSidebar(
   (container as any).toggleCollapsed = toggleCollapsed;
   (container as any).updateStats = (newStats: SidebarStats) => {
     refreshStats(newStats);
+  };
+  (container as any).updateLayerCounts = () => {
+    buildLayerToggles();
   };
 
   return container;

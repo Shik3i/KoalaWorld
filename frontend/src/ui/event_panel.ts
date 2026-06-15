@@ -142,9 +142,9 @@ export function createEventPanel(
   toggleBtn.textContent = '\uD83D\uDCCB Events';
   toggleBtn.style.cssText = `
     position: fixed;
-    bottom: 16px;
+    bottom: 62px;
     right: 16px;
-    z-index: 151;
+    z-index: var(--kw-z-event-panel-toggle, 140);
   `;
 
   const panel = document.createElement('div');
@@ -161,7 +161,7 @@ export function createEventPanel(
     flex-direction: column;
     box-sizing: border-box;
     box-shadow: -4px 0 24px rgba(0,0,0,0.3);
-    z-index: 150;
+    z-index: var(--kw-z-event-panel, 145);
   `;
 
   const header = document.createElement('div');
@@ -482,7 +482,7 @@ export function createEventPanel(
   toggleBtn.addEventListener('click', () => setOpen(true));
 
   function reposition() {
-    if (window.innerWidth < 600) {
+    if (window.innerWidth < 768) {
       panel.style.top = 'auto';
       panel.style.bottom = '0';
       panel.style.left = '0';
@@ -493,7 +493,7 @@ export function createEventPanel(
       if (!isOpen) {
         panel.style.transform = 'translateY(100%)';
       }
-      toggleBtn.style.bottom = '80px';
+      toggleBtn.style.bottom = '110px';
     } else {
       panel.style.top = '0';
       panel.style.bottom = 'auto';
@@ -505,7 +505,7 @@ export function createEventPanel(
       if (!isOpen) {
         panel.style.transform = 'translateX(100%)';
       }
-      toggleBtn.style.bottom = '16px';
+      toggleBtn.style.bottom = '62px';
     }
   }
   window.addEventListener('resize', reposition);

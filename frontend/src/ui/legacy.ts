@@ -387,48 +387,40 @@ export function applyTheme(theme: 'dark' | 'light') {
 
 export function createAdminPanel(
   getStatus: () => { layers: { type: string; enabled: boolean; lastSync: string | null }[] }
-): HTMLDivElement {
+): { button: HTMLButtonElement; panel: HTMLDivElement; destroy: () => void } {
   const toggleBtn = document.createElement('button');
-  toggleBtn.textContent = '📊 Status';
+  toggleBtn.textContent = '\u{1F4CA} Status';
+  toggleBtn.classList.add('kw-btn', 'kw-btn-sm');
   toggleBtn.style.cssText = `
-    position: absolute;
+    position: fixed;
     bottom: 16px;
     right: 16px;
-    background: rgba(0,0,0,0.7);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 8px;
-    color: #ccc;
-    padding: 8px 14px;
-    cursor: pointer;
-    font-family: sans-serif;
-    font-size: 13px;
-    z-index: 100;
+    z-index: var(--kw-z-admin, 130);
   `;
 
   const panel = document.createElement('div');
+  panel.classList.add('kw-panel');
   panel.style.cssText = `
-    position: absolute;
-    bottom: 60px;
+    position: fixed;
+    bottom: 52px;
     right: 16px;
-    background: rgba(0,0,0,0.85);
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: #ccc;
-    font-family: monospace;
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-family: var(--kw-font-mono, monospace);
     font-size: 12px;
-    z-index: 100;
+    z-index: var(--kw-z-admin, 130);
     display: none;
-    min-width: 250px;
-    border: 1px solid rgba(255,255,255,0.15);
+    min-width: 240px;
+    max-width: 320px;
   `;
 
   function refresh() {
     const status = getStatus();
     let html = '<div style="font-weight:bold;margin-bottom:8px;color:#fff;">Feed Status</div>';
     for (const layer of status.layers) {
-      const dot = layer.enabled ? '🟢' : '🔴';
+      const dot = layer.enabled ? '\u{1F7E2}' : '\u{1F534}';
       const sync = layer.lastSync ? new Date(layer.lastSync).toLocaleString() : 'never';
-      html += `<div>${dot} ${layer.type} — last sync: ${sync}</div>`;
+      html += `<div>${dot} ${layer.type} \u2014 last sync: ${sync}</div>`;
     }
     html += `<div style="margin-top:8px;color:#888;">Last updated: ${new Date().toLocaleTimeString()}</div>`;
     panel.innerHTML = html;
@@ -443,14 +435,34 @@ export function createAdminPanel(
     }
   });
 
-  setInterval(() => {
+  const interval = setInterval(() => {
     if (panel.style.display !== 'none') refresh();
   }, 30000);
 
-  const wrapper = document.createElement('div');
-  wrapper.appendChild(toggleBtn);
-  wrapper.appendChild(panel);
-  return wrapper;
+  document.body.appendChild(toggleBtn);
+  document.body.appendChild(panel);
+
+  function reposition() {
+    if (window.innerWidth < 768) {
+      toggleBtn.style.bottom = '70px';
+      panel.style.bottom = '106px';
+    } else {
+      toggleBtn.style.bottom = '16px';
+      panel.style.bottom = '52px';
+    }
+  }
+  window.addEventListener('resize', reposition);
+  reposition();
+
+  return {
+    button: toggleBtn,
+    panel,
+    destroy: () => {
+      clearInterval(interval);
+      toggleBtn.remove();
+      panel.remove();
+    },
+  };
 }
 
 export function createEventModal(): { show: (event: GeoEvent) => void; hide: () => void } {

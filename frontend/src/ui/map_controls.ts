@@ -65,7 +65,7 @@ const CSS = `
 .mc-btn:hover::after {
   opacity: 1;
 }
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .mc-container {
     top: auto;
     bottom: 16px;

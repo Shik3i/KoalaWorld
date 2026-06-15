@@ -49,7 +49,7 @@ const CSS = `
   display: flex;
   flex-direction: column;
   gap: 14px;
-  z-index: 140;
+  z-index: var(--kw-z-info-panel, 150);
   border-radius: 14px 0 0 14px;
   box-sizing: border-box;
 }
@@ -194,7 +194,7 @@ const CSS = `
   border-color: rgba(34,197,94,0.25);
   color: #22c55e;
 }
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .ip-panel {
     top: auto;
     bottom: 0;

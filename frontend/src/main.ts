@@ -317,6 +317,36 @@ document.body.appendChild(createMagnitudeLegend());
 // --- LOADING ---
 const loading = createLoadingIndicator();
 
+// --- EMPTY STATE ---
+const emptyStateToast = document.createElement('div');
+emptyStateToast.id = 'kw-empty-state';
+emptyStateToast.style.cssText = `
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: #aaa;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-family: var(--kw-font, sans-serif);
+  font-size: 13px;
+  z-index: var(--kw-z-legend, 115);
+  display: none;
+  pointer-events: none;
+  white-space: nowrap;
+`;
+document.body.appendChild(emptyStateToast);
+
+function showEmptyToast(msg: string) {
+  emptyStateToast.textContent = msg;
+  emptyStateToast.style.display = 'block';
+}
+
+function hideEmptyToast() {
+  emptyStateToast.style.display = 'none';
+}
+
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -423,10 +453,10 @@ function buildQueryParams(): Record<string, string> {
 
   if (filterState.minMag) params.min_mag = filterState.minMag;
   if (filterState.maxMag) params.max_mag = filterState.maxMag;
-  if (filterState.dateFrom && currentMode !== 'today' && currentMode !== 'week' && currentMode !== 'month') {
+  if (filterState.dateFrom) {
     params.from = filterState.dateFrom + 'T00:00:00Z';
   }
-  if (filterState.dateTo && currentMode !== 'today' && currentMode !== 'week' && currentMode !== 'month') {
+  if (filterState.dateTo) {
     params.to = filterState.dateTo + 'T23:59:59Z';
   }
 
@@ -441,6 +471,10 @@ async function fetchAndDisplayEarthquakes() {
     const eventsChanged = hasDataChanged(res.data, latestEvents);
     latestEvents = res.data;
     totalEventCount = res.total || res.data.length;
+
+    const eqCtrl = layerControls.find(c => c.id === 'earthquakes');
+    if (eqCtrl) eqCtrl.count = totalEventCount;
+    (sidebar as any).updateLayerCounts?.();
 
     if (eventsChanged || !markersGroup) {
       if (markersGroup) {
@@ -492,9 +526,16 @@ async function fetchAndDisplayEarthquakes() {
     (sidebar as any).updateStats?.(sidebarStats);
 
     loading.hide();
+
+    if (res.data.length === 0) {
+      showEmptyToast('No events match your filters');
+    } else {
+      hideEmptyToast();
+    }
   } catch {
     console.warn('Failed to fetch earthquake data - API may not be available yet');
     loading.hide();
+    showEmptyToast('API error — retrying...');
   }
 }
 
@@ -532,6 +573,10 @@ function hasDataChanged(newEvents: GeoEvent[], oldEvents: GeoEvent[]): boolean {
 async function fetchAndDisplayWildfires() {
   try {
     const events = await wildfirePlugin.fetchEvents({ limit: '5000' });
+    const wfCtrl = layerControls.find(c => c.id === 'wildfire');
+    if (wfCtrl) wfCtrl.count = events.length;
+    (sidebar as any).updateLayerCounts?.();
+
     if (wildfireGroup) {
       worldGroup.remove(wildfireGroup);
       disposeGroup(wildfireGroup);
@@ -547,6 +592,10 @@ async function fetchAndDisplayWildfires() {
 async function fetchAndDisplayWeather() {
   try {
     const events = await weatherPlugin.fetchEvents({ limit: '200' });
+    const weCtrl = layerControls.find(c => c.id === 'weather');
+    if (weCtrl) weCtrl.count = events.length;
+    (sidebar as any).updateLayerCounts?.();
+
     if (weatherGroup) {
       worldGroup.remove(weatherGroup);
       disposeGroup(weatherGroup);
@@ -618,20 +667,19 @@ const monitor = createAPIStatusMonitor(
 );
 monitor.start();
 
-const adminPanel = createAdminPanel(() => ({ layers: [] }));
-document.body.appendChild(adminPanel);
+let adminPanel = createAdminPanel(() => ({ layers: [] }));
 
 async function refreshAdminStatus() {
   try {
     const res = await api.getLayers();
-    adminPanel.replaceWith(createAdminPanel(() => ({
+    adminPanel.destroy();
+    adminPanel = createAdminPanel(() => ({
       layers: (res as any).data?.map((l: any) => ({
         type: l.type,
         enabled: l.enabled,
         lastSync: l.last_sync
       })) || []
-    })));
-    document.body.appendChild(adminPanel);
+    }));
   } catch { /* backend not available yet */ }
 }
 refreshAdminStatus();
