@@ -6,16 +6,15 @@ We love your input! We want to make contributing as easy and transparent as poss
 
 1. Fork the repo and create your branch from `main`.
 2. Make your changes.
-3. Run the tests:
+3. **Run the full verification script** (works on macOS, Linux, Windows Git Bash/WSL):
    ```bash
-   cd backend && go test ./... -v
-   cd frontend && npm run typecheck
+   # Option A — shell script (cross-platform)
+   ./scripts/verify.sh
+
+   # Option B — Make (macOS/Linux)
+   make verify
    ```
-4. Ensure the Docker build still works:
-   ```bash
-   docker build -t koalaworld .
-   ```
-5. Submit a pull request.
+4. Submit a pull request.
 
 ## Code Style
 
