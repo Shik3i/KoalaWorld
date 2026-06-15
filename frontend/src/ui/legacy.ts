@@ -1,4 +1,4 @@
-import type { GeoEvent } from './types';
+import type { GeoEvent } from '../types';
 
 function escapeHtml(str: string): string {
   const div = document.createElement('div');

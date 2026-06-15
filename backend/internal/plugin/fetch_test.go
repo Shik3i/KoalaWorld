@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -42,11 +43,11 @@ func TestEarthquakeFetchWithServer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := usgsURL
-	usgsURL = server.URL
-	defer func() { usgsURL = originalURL }()
+	originalURL := os.Getenv("KOALA_USGS_URL")
+	os.Setenv("KOALA_USGS_URL", server.URL)
+	defer func() { os.Setenv("KOALA_USGS_URL", originalURL) }()
 
-	plugin := &EarthquakePlugin{db: nil}
+	plugin := &EarthquakePlugin{db: nil, backfillDone: true}
 	records, err := plugin.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)

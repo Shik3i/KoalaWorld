@@ -32,10 +32,19 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Parse limit
 	limitStr := r.URL.Query().Get("limit")
-	limit := 1000
+	limit := 5000
 	if limitStr != "" {
 		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
 			limit = v
+		}
+	}
+
+	// Parse offset
+	offsetStr := r.URL.Query().Get("offset")
+	offset := 0
+	if offsetStr != "" {
+		if v, err := strconv.Atoi(offsetStr); err == nil && v >= 0 {
+			offset = v
 		}
 	}
 
@@ -85,11 +94,17 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, err := h.DB.GetEvents(typeFilter, limit, from, to, bbox, minMag, maxMag, searchQuery)
+	events, err := h.DB.GetEvents(typeFilter, limit, offset, from, to, bbox, minMag, maxMag, searchQuery)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch events")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, events)
+	total, err := h.DB.CountEvents(typeFilter, from, to, bbox, minMag, maxMag, searchQuery)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to count events")
+		return
+	}
+
+	writeJSONWithTotal(w, http.StatusOK, events, total)
 }

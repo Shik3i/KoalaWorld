@@ -187,6 +187,34 @@ func seedDevData(db *sql.DB) error {
 	return nil
 }
 
+// GetLatestEventTimestamp returns the most recent event timestamp for a given type,
+// or nil if no events exist. Used to determine the start of the next fetch window.
+func (db *DB) GetLatestEventTimestamp(typeFilter string) (*string, error) {
+	var ts *string
+	err := db.QueryRow("SELECT MAX(timestamp) FROM events WHERE type = ?", typeFilter).Scan(&ts)
+	if err != nil {
+		return nil, err
+	}
+	return ts, nil
+}
+
+// CountEventsByType returns the number of events for the given type.
+func (db *DB) CountEventsByType(typeFilter string) (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM events WHERE type = ?", typeFilter).Scan(&count)
+	return count, err
+}
+
+// GetLayerLastSync returns the last_sync_at timestamp for a layer, or nil if never synced.
+func (db *DB) GetLayerLastSync(layerType string) (*string, error) {
+	var lastSync *string
+	err := db.QueryRow("SELECT last_sync_at FROM layers WHERE type = ?", layerType).Scan(&lastSync)
+	if err != nil {
+		return nil, err
+	}
+	return lastSync, nil
+}
+
 // GetLayers returns all rows from the layers table.
 func (db *DB) GetLayers() ([]Layer, error) {
 	rows, err := db.Query("SELECT id, type, enabled, last_sync_at, created_at FROM layers ORDER BY type")
@@ -293,14 +321,15 @@ func (db *DB) UpsertEvent(e Event) error {
 // GetEvents returns events matching the provided filters. All filter parameters
 // are optional; empty/nil values are ignored.
 //   - typeFilter: if non-empty, filters by event type.
-//   - limit: max rows (0 uses default 1000, capped at 10000).
+//   - limit: max rows (0 uses default 5000, capped at 50000).
+//   - offset: rows to skip before returning results.
 //   - from: ISO 8601 start timestamp (inclusive).
 //   - to: ISO 8601 end timestamp (inclusive).
 //   - bbox: [minLon, minLat, maxLon, maxLat] for spatial filtering.
 //   - minMag: minimum magnitude (inclusive).
 //   - maxMag: maximum magnitude (inclusive).
 //   - searchQuery: if non-empty, filters by metadata LIKE pattern.
-func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []float64, minMag, maxMag, searchQuery string) ([]Event, error) {
+func (db *DB) GetEvents(typeFilter string, limit, offset int, from, to string, bbox []float64, minMag, maxMag, searchQuery string) ([]Event, error) {
 	query := "SELECT id, type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata, updated_at, created_at FROM events"
 	var conditions []string
 	var args []interface{}
@@ -356,11 +385,15 @@ func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []fl
 	query += " ORDER BY timestamp DESC"
 
 	if limit <= 0 {
-		limit = 1000
-	} else if limit > 10000 {
-		limit = 10000
+		limit = 5000
+	} else if limit > 50000 {
+		limit = 50000
 	}
 	query += fmt.Sprintf(" LIMIT %d", limit)
+
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET %d", offset)
+	}
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -387,6 +420,62 @@ func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []fl
 		events = []Event{}
 	}
 	return events, nil
+}
+
+// CountEvents returns the total number of events matching the provided filters
+// (excluding limit/offset). Uses the same filter parameters as GetEvents.
+func (db *DB) CountEvents(typeFilter string, from, to string, bbox []float64, minMag, maxMag, searchQuery string) (int, error) {
+	query := "SELECT COUNT(*) FROM events"
+	var conditions []string
+	var args []interface{}
+
+	if typeFilter != "" {
+		conditions = append(conditions, "type = ?")
+		args = append(args, typeFilter)
+	}
+	if from != "" {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, from)
+	}
+	if to != "" {
+		conditions = append(conditions, "timestamp <= ?")
+		args = append(args, to)
+	}
+	if len(bbox) == 4 {
+		conditions = append(conditions, "latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?")
+		args = append(args, bbox[1], bbox[3], bbox[0], bbox[2])
+	}
+	if minMag != "" {
+		if v, err := strconv.ParseFloat(minMag, 64); err == nil {
+			conditions = append(conditions, "magnitude >= ?")
+			args = append(args, v)
+		}
+	}
+	if maxMag != "" {
+		if v, err := strconv.ParseFloat(maxMag, 64); err == nil {
+			conditions = append(conditions, "magnitude <= ?")
+			args = append(args, v)
+		}
+	}
+
+	if searchQuery != "" {
+		conditions = append(conditions, "metadata LIKE ?")
+		args = append(args, "%"+searchQuery+"%")
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE "
+		for i, c := range conditions {
+			if i > 0 {
+				query += " AND "
+			}
+			query += c
+		}
+	}
+
+	var count int
+	err := db.QueryRow(query, args...).Scan(&count)
+	return count, err
 }
 
 // InsertSyncLog inserts a row into the sync_logs table.

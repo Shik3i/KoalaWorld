@@ -1,0 +1,38 @@
+/* Theme picker: grid of gradient color swatches */
+.koala-theme-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.koala-theme-option {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.2s var(--kw-ease-out), transform 0.2s var(--kw-ease-out), box-shadow 0.2s var(--kw-ease-out);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 6px;
+  font-size: 10px;
+  font-family: var(--kw-font);
+  font-weight: var(--kw-font-weight-semibold);
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  letter-spacing: 0.03em;
+}
+
+.koala-theme-option:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.koala-theme-option.active {
+  border-color: var(--kw-accent);
+  box-shadow: var(--kw-shadow-glow);
+  transform: scale(1.08);
+}

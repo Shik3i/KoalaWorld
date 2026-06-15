@@ -1,4 +1,9 @@
-export { createEarthquakeMarkers } from './earthquake';
-export { createCountryBorders } from './country_borders';
+export { createEarthquakeMarkers, updateMarkerAnimations } from './earthquake';
 export { createGridLayer } from './grid_layer';
+export { createCountryBorders } from './country_borders';
 export { createHeatmapTexture, createHeatmapOverlay } from './heatmap';
+export { createPlateBoundaries } from './plate_boundaries';
+export { createRippleEffect, flashMarker } from './effects';
+export { wildfirePlugin } from './wildfire';
+export { weatherPlugin } from './weather';
+export type { LayerPlugin } from './plugin';

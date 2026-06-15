@@ -20,6 +20,7 @@ export interface GeoEvent {
 export interface EventsResponse {
   status: string;
   data: GeoEvent[];
+  total?: number;
 }
 
 export interface ConfigResponse {

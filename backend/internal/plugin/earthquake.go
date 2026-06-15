@@ -10,15 +10,9 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
-
-var usgsURL = func() string {
-	if v := os.Getenv("KOALA_USGS_URL"); v != "" {
-		return v
-	}
-	return "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
-}()
 
 var httpClient = &http.Client{
 	Timeout: func() time.Duration {
@@ -65,11 +59,19 @@ type earthquakeMeta struct {
 }
 
 type EarthquakePlugin struct {
-	db *database.DB
+	db           *database.DB
+	mu           sync.Mutex
+	backfillDone bool
 }
 
 func NewEarthquakePlugin(db *database.DB) *EarthquakePlugin {
 	return &EarthquakePlugin{db: db}
+}
+
+func fdsnURL(start, end time.Time) string {
+	return fmt.Sprintf("https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=%s&endtime=%s&minmagnitude=2.5&orderby=time",
+		start.Format("2006-01-02T15:04:05"),
+		end.Format("2006-01-02T15:04:05"))
 }
 
 func (p *EarthquakePlugin) Name() string {
@@ -81,7 +83,56 @@ func (p *EarthquakePlugin) Type() EventType {
 }
 
 func (p *EarthquakePlugin) Fetch(ctx context.Context) ([]EventRecord, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, usgsURL, nil)
+	p.mu.Lock()
+	if !p.backfillDone {
+		count, err := p.db.CountEventsByType("earthquake")
+		if err != nil {
+			p.mu.Unlock()
+			return nil, fmt.Errorf("count events: %w", err)
+		}
+		if count == 0 {
+			p.mu.Unlock()
+			log.Printf("Earthquake backfill: starting (0 events found)")
+			if backfillRecords, err := p.Backfill(ctx); err != nil {
+				log.Printf("Earthquake backfill error: %v", err)
+			} else {
+				if err := p.Upsert(backfillRecords); err != nil {
+					log.Printf("Earthquake backfill upsert error: %v", err)
+				} else {
+					log.Printf("Earthquake backfill: upserted %d records", len(backfillRecords))
+				}
+			}
+			p.mu.Lock()
+		}
+		p.backfillDone = true
+	}
+	p.mu.Unlock()
+
+	now := time.Now().UTC()
+	start := now.Add(-5 * time.Minute)
+
+	if p.db != nil {
+		latestTS, err := p.db.GetLatestEventTimestamp("earthquake")
+		if err != nil {
+			log.Printf("Earthquake: failed to read latest event timestamp: %v", err)
+		} else if latestTS != nil {
+			if t, err := time.Parse(time.RFC3339, *latestTS); err == nil {
+				// Start 6 hours before our newest event to catch
+				// retroactively reported events (API delays)
+				start = t.Add(-6 * time.Hour)
+				if now.Sub(start) > 7*24*time.Hour {
+					start = now.Add(-5 * time.Minute)
+				}
+			}
+		}
+	}
+
+	url := os.Getenv("KOALA_USGS_URL")
+	if url == "" {
+		url = fdsnURL(start, now)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -118,6 +169,53 @@ func (p *EarthquakePlugin) Fetch(ctx context.Context) ([]EventRecord, error) {
 	}
 
 	log.Printf("Fetched %d earthquake records from USGS", len(records))
+	return records, nil
+}
+
+func (p *EarthquakePlugin) Backfill(ctx context.Context) ([]EventRecord, error) {
+	now := time.Now().UTC()
+	start := now.AddDate(0, 0, -90)
+
+	url := fdsnURL(start, now)
+	log.Printf("Earthquake backfill: fetching 90 days of M2.5+ data from %s to %s", start.Format("2006-01-02"), now.Format("2006-01-02"))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("backfill create request: %w", err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("backfill http get: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("backfill unexpected status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("backfill read body: %w", err)
+	}
+
+	var fc geoJSONFeatureCollection
+	if err := json.Unmarshal(body, &fc); err != nil {
+		return nil, fmt.Errorf("backfill parse geojson: %w", err)
+	}
+
+	if fc.Type != "FeatureCollection" {
+		return nil, fmt.Errorf("backfill unexpected geojson type: %s", fc.Type)
+	}
+
+	records := make([]EventRecord, 0, len(fc.Features))
+	for _, f := range fc.Features {
+		if record, ok := p.Normalize(f); ok {
+			records = append(records, record)
+		}
+	}
+
+	log.Printf("Earthquake backfill: parsed %d records from %d features", len(records), len(fc.Features))
 	return records, nil
 }
 

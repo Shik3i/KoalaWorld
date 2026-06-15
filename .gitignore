@@ -47,3 +47,7 @@ docs/audits/
 
 # Test artifacts
 *.test
+
+# Go compiled binaries
+backend/koalaworld
+koalaworld
