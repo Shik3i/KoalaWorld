@@ -1,38 +1,63 @@
-## KoalaWorld
+# KoalaWorld
 
-Self-hosted 3D geo-visualization service with Go backend and Three.js frontend.
+[![CI](https://github.com/Shik3i/KoalaWorld/actions/workflows/ci.yml/badge.svg)](https://github.com/Shik3i/KoalaWorld/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Shik3i/KoalaWorld)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Shik3i/KoalaWorld)](backend/go.mod)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Quick Start (Docker)
+**Self-hosted 3D geo-visualization service** — Go backend + SQLite, Three.js/Vite frontend. Visualize earthquakes, wildfires, and weather data on an interactive 3D globe.
+
+## Features
+
+- 🌍 Interactive 3D globe with Earth texture
+- 🔴 Real-time earthquake markers (USGS feed)
+- 🔥 Wildfire activity tracking (NASA FIRMS)
+- 🌤️ Global weather conditions (Open-Meteo)
+- 🗺️ Country borders overlay (Natural Earth)
+- 🔍 Advanced search/filter by magnitude, date, location
+- 🎨 Dark/Light theme toggle
+- 📊 Live feed status panel
+- 🐳 One-command Docker deployment
+
+## Quick Start
 
 ```bash
 docker compose up -d
 ```
 
-Open http://localhost:8080 in your browser.
+Open http://localhost:8080.
 
-## Local Development
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/ARCHITECTURE.md) | System design and rationale |
+| [API Reference](docs/API.md) | REST endpoint documentation |
+| [Database Schema](docs/DATABASE.md) | SQLite schema and queries |
+| [Layer Architecture](docs/LAYERS.md) | Frontend layer system |
+| [Data Feeds](docs/FEEDS.md) | External data sources |
+| [Roadmap](docs/ROADMAP.md) | Development priorities |
+
+## Development
 
 ### Backend (Go)
 
 ```bash
-cd backend && go run ./cmd/koalaworld
+cd backend
+go run ./cmd/koalaworld
 ```
 
-Server starts on http://localhost:8080.
-
-### Frontend (Vite + Three.js)
-
-For development with hot-reload:
+### Frontend (Vite + TypeScript)
 
 ```bash
-cd frontend && npm install && npm run dev
+cd frontend
+npm install
+npm run dev      # Dev server with HMR at :5173
+npm run build    # Production build
+npm run typecheck # TypeScript type checking
 ```
 
-The Vite dev server runs on http://localhost:5173 and proxies `/api` requests to the Go backend on port 8080.
-
 ### Production Build
-
-To build the frontend and serve it from the Go binary:
 
 ```bash
 cd frontend && npm run build
@@ -41,9 +66,7 @@ cp -r dist/* ../backend/web/
 cd ../backend && go build -o koalaworld ./cmd/koalaworld && ./koalaworld
 ```
 
-Then open http://localhost:8080.
-
-## Docker
+### Docker
 
 ```bash
 docker compose build
@@ -52,6 +75,22 @@ docker compose up -d
 
 ## Configuration
 
-- Earthquake data: fetched from USGS on startup and refreshed periodically
-- Database: SQLite stored at `./data/koalaworld.db`
-- Frontend assets: served from `web/` directory alongside the binary
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP server port |
+| `FIRMS_API_KEY` | — | NASA FIRMS API key for wildfire data |
+
+## Testing
+
+```bash
+cd backend && go test ./... -v
+cd frontend && npm run typecheck
+```
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+[MIT](LICENSE) © 2026 Shik3i

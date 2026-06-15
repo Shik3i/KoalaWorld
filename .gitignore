@@ -1,19 +1,49 @@
-# Ignored Files
+# OS files
 .DS_Store
+Thumbs.db
+
+# Dependencies
 node_modules/
+
+# Build outputs
+frontend/dist/
+backend/web/
+backend/bin/
 dist/
 build/
+
+# Logs
 *.log
-/data/
+
+# Database
 *.db
 *.db-wal
 *.db-shm
+/data/
+backend/data/
+
+# Environment files
 .env*
+.envrc
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+opencode.json
+opencode.jsonc
+opencode.json.bak
+AGENTS.md
+
+# Binaries
 *.exe
 *.test
 *.out
-frontend/dist/
-backend/web/
 
 # Audit reports (auto-generated)
 docs/audits/
+
+# Test artifacts
+*.test

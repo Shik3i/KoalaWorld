@@ -12,9 +12,24 @@ RUN CGO_ENABLED=0 go build -o /koalaworld ./cmd/koalaworld
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
+
+# Create non-root user
+RUN adduser -D -h /app koala
+
 WORKDIR /app
-COPY --from=backend-builder /koalaworld .
-COPY --from=frontend-builder /app/frontend/dist ./web
+COPY --from=backend-builder --chown=koala:koala /koalaworld .
+COPY --from=frontend-builder --chown=koala:koala /app/frontend/dist ./web
+
+USER koala
 EXPOSE 8080
-VOLUME /data
+VOLUME /app/data
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/healthz || exit 1
+
+LABEL org.opencontainers.image.title="KoalaWorld" \
+      org.opencontainers.image.description="Self-hosted 3D geo-visualization service" \
+      org.opencontainers.image.source="https://github.com/Shik3i/KoalaWorld" \
+      org.opencontainers.image.licenses="MIT"
+
 CMD ["./koalaworld"]
