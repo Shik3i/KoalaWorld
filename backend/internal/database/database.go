@@ -1,0 +1,326 @@
+package database
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strconv"
+
+	_ "modernc.org/sqlite"
+)
+
+// DB wraps the SQLite database connection.
+type DB struct {
+	*sql.DB
+}
+
+// Layer represents a row in the layers table.
+type Layer struct {
+	ID         int64   `json:"id"`
+	Type       string  `json:"type"`
+	Enabled    bool    `json:"enabled"`
+	LastSyncAt *string `json:"last_sync"`
+	CreatedAt  string  `json:"-"`
+}
+
+// Event represents a row in the events table.
+type Event struct {
+	ID         int64           `json:"id"`
+	Type       string          `json:"type"`
+	Source     string          `json:"source"`
+	ExternalID string          `json:"external_id"`
+	Latitude   float64         `json:"latitude"`
+	Longitude  float64         `json:"longitude"`
+	Magnitude  *float64        `json:"magnitude,omitempty"`
+	DepthKm    *float64        `json:"depth_km,omitempty"`
+	Timestamp  string          `json:"timestamp"`
+	Metadata   json.RawMessage `json:"metadata"`
+	UpdatedAt  string          `json:"-"`
+	CreatedAt  string          `json:"-"`
+}
+
+// Open opens the SQLite database at dbPath, creating the directory and
+// running migrations if necessary.
+func Open(dbPath string) (*DB, error) {
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("create data directory: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	// Enable WAL mode for better concurrent read performance.
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		return nil, fmt.Errorf("enable WAL: %w", err)
+	}
+
+	// Enable foreign keys.
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
+
+	if err := migrate(db); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	if err := seed(db); err != nil {
+		return nil, fmt.Errorf("seed: %w", err)
+	}
+
+	return &DB{db}, nil
+}
+
+// migrate creates tables and indexes if they do not exist.
+// Schema matches docs/DATABASE.md with corrections: added source column
+// and UNIQUE(source, external_id) constraint to events table.
+func migrate(db *sql.DB) error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS layers (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		type TEXT NOT NULL UNIQUE CHECK(type IN ('earthquake', 'wildfire', 'weather')),
+		enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+		last_sync_at TEXT,
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ'))
+	);
+
+	CREATE TABLE IF NOT EXISTS events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		type TEXT NOT NULL CHECK(type IN ('earthquake', 'wildfire', 'weather')),
+		external_id TEXT NOT NULL,
+		source TEXT NOT NULL,
+		updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ')),
+		latitude REAL NOT NULL,
+		longitude REAL NOT NULL,
+		magnitude REAL,
+		depth_km REAL,
+		timestamp TEXT NOT NULL,
+		metadata TEXT NOT NULL DEFAULT '{}',
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ')),
+		UNIQUE(source, external_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+	CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_events_coordinates ON events(latitude, longitude);
+	`
+
+	_, err := db.Exec(schema)
+	return err
+}
+
+// seed inserts default layer rows if they do not already exist.
+func seed(db *sql.DB) error {
+	_, err := db.Exec(`
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('earthquake', 1);
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('wildfire', 0);
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('weather', 0);
+	`)
+	return err
+}
+
+// GetLayers returns all rows from the layers table.
+func (db *DB) GetLayers() ([]Layer, error) {
+	rows, err := db.Query("SELECT id, type, enabled, last_sync_at, created_at FROM layers ORDER BY type")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var layers []Layer
+	for rows.Next() {
+		var l Layer
+		if err := rows.Scan(&l.ID, &l.Type, &l.Enabled, &l.LastSyncAt, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		layers = append(layers, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if layers == nil {
+		layers = []Layer{}
+	}
+	return layers, nil
+}
+
+// UpsertLayer inserts or updates a layer row identified by type.
+func (db *DB) UpsertLayer(layerType string, enabled bool, lastSyncAt *string) error {
+	_, err := db.Exec(`
+		INSERT INTO layers (type, enabled, last_sync_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT(type) DO UPDATE SET
+			enabled = excluded.enabled,
+			last_sync_at = excluded.last_sync_at
+	`, layerType, enabled, lastSyncAt)
+	return err
+}
+
+// BatchUpsertEvents performs multiple event upserts in a single transaction.
+func (db *DB) BatchUpsertEvents(events []Event) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO events (type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(source, external_id) DO UPDATE SET
+			type = excluded.type,
+			latitude = excluded.latitude,
+			longitude = excluded.longitude,
+			magnitude = excluded.magnitude,
+			depth_km = excluded.depth_km,
+			timestamp = excluded.timestamp,
+			metadata = excluded.metadata,
+			updated_at = strftime('%Y-%m-%dT%H:%M:%SZ')
+	`)
+	if err != nil {
+		return fmt.Errorf("prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, e := range events {
+		metadata := e.Metadata
+		if metadata == nil {
+			metadata = json.RawMessage("{}")
+		}
+		if _, err := stmt.Exec(e.Type, e.Source, e.ExternalID, e.Latitude, e.Longitude,
+			e.Magnitude, e.DepthKm, e.Timestamp, string(metadata)); err != nil {
+			return fmt.Errorf("upsert event %s: %w", e.ExternalID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+// UpsertEvent inserts or updates an event identified by (source, external_id).
+func (db *DB) UpsertEvent(e Event) error {
+	metadata := e.Metadata
+	if metadata == nil {
+		metadata = json.RawMessage("{}")
+	}
+	_, err := db.Exec(`
+		INSERT INTO events (type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(source, external_id) DO UPDATE SET
+			type = excluded.type,
+			latitude = excluded.latitude,
+			longitude = excluded.longitude,
+			magnitude = excluded.magnitude,
+			depth_km = excluded.depth_km,
+			timestamp = excluded.timestamp,
+			metadata = excluded.metadata,
+			updated_at = strftime('%Y-%m-%dT%H:%M:%SZ')
+	`, e.Type, e.Source, e.ExternalID, e.Latitude, e.Longitude, e.Magnitude, e.DepthKm, e.Timestamp, string(metadata))
+	return err
+}
+
+// GetEvents returns events matching the provided filters. All filter parameters
+// are optional; empty/nil values are ignored.
+//   - typeFilter: if non-empty, filters by event type.
+//   - limit: max rows (0 uses default 1000, capped at 10000).
+//   - from: ISO 8601 start timestamp (inclusive).
+//   - to: ISO 8601 end timestamp (inclusive).
+//   - bbox: [minLon, minLat, maxLon, maxLat] for spatial filtering.
+//   - minMag: minimum magnitude (inclusive).
+//   - maxMag: maximum magnitude (inclusive).
+func (db *DB) GetEvents(typeFilter string, limit int, from, to string, bbox []float64, minMag, maxMag string) ([]Event, error) {
+	query := "SELECT id, type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata, updated_at, created_at FROM events"
+	var conditions []string
+	var args []interface{}
+
+	if typeFilter != "" {
+		conditions = append(conditions, "type = ?")
+		args = append(args, typeFilter)
+	}
+	if from != "" {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, from)
+	}
+	if to != "" {
+		conditions = append(conditions, "timestamp <= ?")
+		args = append(args, to)
+	}
+	if len(bbox) == 4 {
+		conditions = append(conditions, "latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?")
+		args = append(args, bbox[1], bbox[3], bbox[0], bbox[2])
+	}
+	if minMag != "" {
+		if v, err := strconv.ParseFloat(minMag, 64); err == nil {
+			conditions = append(conditions, "magnitude >= ?")
+			args = append(args, v)
+		} else {
+			log.Printf("Invalid min_mag value: %q", minMag)
+		}
+	}
+	if maxMag != "" {
+		if v, err := strconv.ParseFloat(maxMag, 64); err == nil {
+			conditions = append(conditions, "magnitude <= ?")
+			args = append(args, v)
+		} else {
+			log.Printf("Invalid max_mag value: %q", maxMag)
+		}
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE "
+		for i, c := range conditions {
+			if i > 0 {
+				query += " AND "
+			}
+			query += c
+		}
+	}
+
+	query += " ORDER BY timestamp DESC"
+
+	if limit <= 0 {
+		limit = 1000
+	} else if limit > 10000 {
+		limit = 10000
+	}
+	query += fmt.Sprintf(" LIMIT %d", limit)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var metadataStr string
+		if err := rows.Scan(&e.ID, &e.Type, &e.Source, &e.ExternalID, &e.Latitude, &e.Longitude,
+			&e.Magnitude, &e.DepthKm, &e.Timestamp, &metadataStr, &e.UpdatedAt, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		e.Metadata = json.RawMessage(metadataStr)
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if events == nil {
+		events = []Event{}
+	}
+	return events, nil
+}
+
+// Close shuts down the database connection.
+func (db *DB) Close() error {
+	return db.DB.Close()
+}

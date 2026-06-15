@@ -1,15 +1,57 @@
-## 🚀 KoalaWorld Local Development Setup
+## KoalaWorld
 
-This project skeleton consists of two main components: a Go backend and a Three.js frontend.
+Self-hosted 3D geo-visualization service with Go backend and Three.js frontend.
+
+## Quick Start (Docker)
+
+```bash
+docker compose up -d
+```
+
+Open http://localhost:8080 in your browser.
+
+## Local Development
 
 ### Backend (Go)
-The Go server runs on `http://localhost:8080`.
-To build and run the backend:
-`cd backend/cmd/koalaworld && go run main.go`
+
+```bash
+cd backend && go run ./cmd/koalaworld
+```
+
+Server starts on http://localhost:8080.
 
 ### Frontend (Vite + Three.js)
-The frontend must be built first to serve assets.
-To install dependencies and start the dev server:
-`cd frontend && npm install && npm run dev` (assuming a standard Vite setup script, which I should verify/add to package.json later if needed for running checks).
 
----
+For development with hot-reload:
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+The Vite dev server runs on http://localhost:5173 and proxies `/api` requests to the Go backend on port 8080.
+
+### Production Build
+
+To build the frontend and serve it from the Go binary:
+
+```bash
+cd frontend && npm run build
+mkdir -p ../backend/web
+cp -r dist/* ../backend/web/
+cd ../backend && go build -o koalaworld ./cmd/koalaworld && ./koalaworld
+```
+
+Then open http://localhost:8080.
+
+## Docker
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+## Configuration
+
+- Earthquake data: fetched from USGS on startup and refreshed periodically
+- Database: SQLite stored at `./data/koalaworld.db`
+- Frontend assets: served from `web/` directory alongside the binary

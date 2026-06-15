@@ -2,40 +2,75 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"koalaworld/internal/database"
+	"koalaworld/internal/handlers"
+	"koalaworld/internal/middleware"
+	"koalaworld/internal/plugin"
 )
 
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
 func main() {
-	port := "8080"
+	// Initialize database.
+	dbPath := "data/koalaworld.db"
+	db, err := database.Open(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+	log.Printf("Database opened at %s", dbPath)
 
-	// Define file server handler for built assets (backend/web/)
-	fs := http.FileServer(http.Dir("web"))
+	// Initialize feed scheduler and register plugins.
+	sched := plugin.NewScheduler(db)
+	sched.Register(plugin.NewEarthquakePlugin(db))
+	sched.Register(plugin.NewWildfirePlugin(db))
+	sched.Register(plugin.NewWeatherPlugin(db))
+	sched.Start(context.Background())
+
+	// Register handlers.
+	configHandler := &handlers.ConfigHandler{DB: db}
+	layersHandler := &handlers.LayersHandler{DB: db, SyncTrigger: sched.SyncLayers}
+	eventsHandler := &handlers.EventsHandler{DB: db}
+
 	mux := http.NewServeMux()
 
-	// API health check endpoint
+	// Health check.
 	mux.HandleFunc("/api/healthz", healthzHandler)
 
-	// Serve static files from the 'web' directory at the root level
+	// Config.
+	mux.Handle("/api/config", configHandler)
+
+	// Layers.
+	mux.HandleFunc("/api/layers", func(w http.ResponseWriter, r *http.Request) {
+		layersHandler.GetLayers(w, r)
+	})
+	mux.HandleFunc("/api/layers/refresh", func(w http.ResponseWriter, r *http.Request) {
+		layersHandler.RefreshLayers(w, r)
+	})
+
+	// Events.
+	mux.Handle("/api/events", eventsHandler)
+	mux.Handle("/api/events/", eventsHandler)
+
+	// Static file server for built frontend assets.
+	fs := http.FileServer(http.Dir("web"))
 	mux.Handle("/", fs)
 
+	// Apply middleware: outermost is Logging, then Timing.
+	h := middleware.Logging(middleware.Timing(mux))
+
+	port := "8080"
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: h,
 	}
 
-	// Graceful shutdown setup
+	// Graceful shutdown.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -46,7 +81,6 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
 	<-stop
 
 	log.Println("Shutting down server gracefully...")
@@ -58,5 +92,12 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
+	sched.Stop()
 	log.Println("Server exited gracefully")
+}
+
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
 }

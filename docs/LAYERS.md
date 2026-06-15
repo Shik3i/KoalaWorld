@@ -80,7 +80,7 @@ type FeedPlugin interface {
     Name() string
     Type() EventType // earthquake | wildfire | weather
     Fetch(ctx context.Context) ([]EventRecord, error)
-    Normalize(record RawData) EventRecord
+    Normalize(record RawData) (EventRecord, bool)
     Upsert(records []EventRecord) error
 }
 ```
@@ -93,7 +93,7 @@ type FeedPlugin interface {
 
 ### Feed Synchronization:
 - A scheduler runs at fixed intervals per plugin.
-- Each plugin fetches raw data, normalizes it in-memory (no DB round-trip during normalization), then upserts results via batched transactions.
+- Each plugin fetches raw data, normalizes it in-memory (no DB round-trip during normalization), then upserts results to SQLite.
 - Failed syncs are logged but do not block subsequent requests or other plugins.
 
 ## 5. Database Layer (SQLite)
@@ -113,4 +113,4 @@ The SQLite database stores normalized event records with full schema details def
 4. API layer queries SQLite for current event data on frontend request.
 5. Frontend receives JSON payload and renders markers on globe.
 
-No caching layer exists; SQLite is the sole persistent cache. The database file lives at `/data/koalaworld.db` inside the Docker container, mounted as a volume for persistence.
+No caching layer exists; SQLite is the sole persistent cache. The database file lives at `/app/data/koalaworld.db` inside the Docker container, mounted as a volume for persistence.

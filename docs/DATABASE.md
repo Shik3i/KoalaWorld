@@ -45,7 +45,7 @@ CREATE INDEX idx_events_coordinates ON events(latitude, longitude);
 | `created_at`| TEXT   | NOT NULL, default value             | Record creation timestamp            |
 
 **Constraints:**
-- Only one row per type (`UNIQUE(type)`). The application manages insertion via `INSERT OR REPLACE`.
+- Only one row per type (`UNIQUE(type)`). Layers are seeded on first run via `INSERT OR IGNORE`.
 
 ### events table
 
@@ -53,14 +53,16 @@ CREATE INDEX idx_events_coordinates ON events(latitude, longitude);
 |-------------|--------|-----------------------------------------|--------------------------------------|
 | `id`        | INTEGER| PRIMARY KEY AUTOINCREMENT               | Unique event identifier              |
 | `type`      | TEXT   | NOT NULL, CHECK type IN (...)          | Event classification                  |
-| `source`    | TEXT   | NOTNULL                                 | Source system (e.g., 'USGS')          |
-| `latitude`  | REAL   | NOTNULL                                 | Latitude in decimal degrees         |
-| `longitude` | REAL   | NOTNULL                                 | Longitude in decimal degrees        |
-| `magnitude` | REAL   | nullable                                  | Event magnitude (type-dependent)      |
-| `depth_km`  | REAL   | nullable                                  | Depth in kilometers, if applicable   |
-| `timestamp` | TEXT   | NOTNULL                                 | ISO 8601 event timestamp              |
-| `metadata`  | TEXT   | NOT NULL DEFAULT '{}'                     | JSON object with additional fields    |
-| `created_at`| TEXT   | NOTNULL, default value                  | Record creation timestamp             |
+| `source`    | TEXT   | NOT NULL                               | Source system (e.g., 'USGS')          |
+| `external_id` | TEXT | NOT NULL                             | ID from the source system             |
+| `latitude`  | REAL   | NOT NULL                               | Latitude in decimal degrees         |
+| `longitude` | REAL   | NOT NULL                               | Longitude in decimal degrees        |
+| `magnitude` | REAL   | nullable                               | Event magnitude (type-dependent)      |
+| `depth_km`  | REAL   | nullable                               | Depth in kilometers, if applicable   |
+| `timestamp` | TEXT   | NOT NULL                               | ISO 8601 event timestamp              |
+| `metadata`  | TEXT   | NOT NULL DEFAULT '{}'                  | JSON object with additional fields    |
+| `updated_at`| TEXT   | NOT NULL, default value                | Last update timestamp                 |
+| `created_at`| TEXT   | NOT NULL, default value                | Record creation timestamp             |
 
 **Constraints:**
 - All coordinates must be valid ranges: latitude [-90, 90], longitude [-180, 180].
@@ -74,12 +76,28 @@ CREATE INDEX idx_events_coordinates ON events(latitude, longitude);
 | `idx_events_timestamp`    | timestamp          | Time-range queries for recent events      |
 | `idx_events_coordinates`  | latitude, longitude | Spatial queries (nearby events)           |
 
+## Additional Configuration
+
+On startup, the application enables:
+- **WAL mode** (`PRAGMA journal_mode=WAL`) for better concurrent read performance.
+- **Foreign keys** (`PRAGMA foreign_keys=ON`) for referential integrity.
+- **UNIQUE constraint** on `(source, external_id)` in the events table to prevent duplicate event records from the same source.
+
 ## Query Patterns
 
 ### Insert (Upsert):
 ```sql
 INSERT INTO events (type, source, external_id, latitude, longitude, magnitude, depth_km, timestamp, metadata) 
-VALUES (?, ?, ?, ?, ?, ?, ?, ?); ON CONFLICT(source, external_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(source, external_id) DO UPDATE SET
+    type = excluded.type,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    magnitude = excluded.magnitude,
+    depth_km = excluded.depth_km,
+    timestamp = excluded.timestamp,
+    metadata = excluded.metadata,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ');
 ```
 
 ### Select recent earthquake events:
@@ -107,4 +125,4 @@ ORDER BY timestamp DESC;
 
 ## Database File Location
 
-The SQLite database file is stored at `/data/koalaworld.db` inside the Docker container, mounted as a volume for persistence across restarts.
+The SQLite database file is stored at `/app/data/koalaworld.db` inside the Docker container, mounted as a volume for persistence across restarts.

@@ -17,6 +17,32 @@ No authentication is required for MVP. All endpoints are public. Rate limiting m
 
 ## Endpoint Reference
 
+### GET /api/healthz
+
+Simple health check endpoint. Returns a 200 OK response with no dependencies.
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
+### GET /api/layers
+
+Returns all available layers and their sync status.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "data": [
+    {"id": 1, "type": "earthquake", "enabled": true, "last_sync": "2024-01-15T06:30:00Z"},
+    {"id": 2, "type": "wildfire", "enabled": false, "last_sync": null}
+  ]
+}
+```
+
 ### GET /api/config
 
 Returns the current configuration state including available layers and sync status.
@@ -73,12 +99,14 @@ Returns all events from SQLite, optionally filtered by type. Supports optional q
     {
       "id": 42,
       "type": "earthquake",
+      "source": "USGS",
+      "external_id": "us7000abcdef",
       "latitude": 35.6895,
       "longitude": 139.6917,
       "magnitude": 6.5,
       "depth_km": 30.0,
       "timestamp": "2024-01-15T06:30:00Z",
-      "source": "USGS",
+      "updated_at": "2024-01-15T06:30:00Z",
       "metadata": {"place": "Tokyo Bay"}
     }
   ]
@@ -98,7 +126,7 @@ Returns earthquake events specifically. Equivalent to `GET /api/events?type=eart
 ### Request Flow:
 1. Go HTTP handler parses request (query parameters or JSON body).
 2. Handler queries SQLite using raw SQL via `database/sql` package.
-3. Results are mapped to response structs and returned as JSON.
+3. Results are mapped to response structs and returned as JSON via `handlers/helpers.go`.
 4. Feed plugins run on a scheduler goroutine, not tied to request timing.
 
 ### Response Envelope:

@@ -1,6 +1,15 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createGlobe } from './globe';
+import { api } from './api';
+import { createEarthquakeMarkers } from './layers/earthquake';
+import { createGridLayer } from './layers/grid_layer';
+import { createCountryBorders } from './layers/country_borders';
+import { createHeatmapTexture, createHeatmapOverlay } from './layers/heatmap';
+import { createLayerUI, createPopup, createFilterUI, createThemeToggle, applyTheme, createAdminPanel } from './ui';
+import type { LayerControl, FilterState } from './ui';
+import type { GeoEvent } from './types';
 
-// Setup environment for dark page and canvas visibility
 document.body.style.backgroundColor = '#000';
 document.body.style.margin = '0';
 document.body.style.overflow = 'hidden';
@@ -12,38 +21,200 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Create a simple sphere (the globe)
-const geometry = new THREE.SphereGeometry(2, 64, 64);
-// Using MeshLambertMaterial for better compatibility with basic lighting in minimal setup
-const material = new THREE.MeshStandardMaterial({ color: 0x3399ff, roughness: 0.5 }); // A stylized blue globe
-const globe = new THREE.Mesh(geometry, material);
-scene.add(globe);
+const textureLoader = new THREE.TextureLoader();
+createGlobe(scene, textureLoader);
 
-// Lighting setup
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(5, 3, 5);
-scene.add(directionalLight);
+const gridGroup = createGridLayer();
+scene.add(gridGroup);
 
 camera.position.z = 5;
 
-// Animation loop
-function animate() {
-	requestAnimationFrame(animate);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 3;
+controls.maxDistance = 15;
 
-	// Rotate the globe
-	globe.rotation.y += 0.005;
-	globe.rotation.x += 0.001;
+let markersGroup: THREE.Group | null = null;
+let bordersGroup: THREE.Group | null = null;
+let heatmapGroup: THREE.Mesh | null = null;
+let latestEvents: GeoEvent[] = [];
 
-	renderer.render(scene, camera);
+const layerControls: LayerControl[] = [
+  { id: 'earthquakes', label: 'Earthquakes', visible: true },
+  { id: 'grid', label: 'Grid', visible: true },
+  { id: 'borders', label: 'Country Borders', visible: true },
+  { id: 'heatmap', label: 'Heatmap', visible: false },
+];
+
+function onLayerToggle(id: string, visible: boolean) {
+  switch (id) {
+    case 'earthquakes':
+      if (markersGroup) markersGroup.visible = visible;
+      break;
+    case 'grid':
+      gridGroup.visible = visible;
+      break;
+    case 'borders':
+      if (bordersGroup) bordersGroup.visible = visible;
+      break;
+    case 'heatmap':
+      if (heatmapGroup) heatmapGroup.visible = visible;
+      break;
+  }
 }
 
-// Handle window resizing
+createLayerUI(layerControls, onLayerToggle);
+
+// Search/Filter UI
+const filterState: FilterState = { query: '', minMag: '', maxMag: '', dateFrom: '', dateTo: '' };
+function applyFilters() {
+  fetchAndDisplayEarthquakes();
+}
+createFilterUI(filterState, (newFilters) => {
+  Object.assign(filterState, newFilters);
+}, applyFilters);
+
+// Theme
+const savedTheme = (localStorage.getItem('koalaworld-theme') as 'dark' | 'light') || 'dark';
+applyTheme(savedTheme);
+createThemeToggle(savedTheme, (theme) => {
+  applyTheme(theme);
+});
+
+const popup = createPopup();
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (event) => {
+  pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  if (markersGroup) {
+    const meshes: THREE.Mesh[] = [];
+    markersGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh) meshes.push(child);
+    });
+
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+      const hit = intersects[0];
+      let hitPos = new THREE.Vector3();
+
+      if (hit.object instanceof THREE.InstancedMesh && hit.instanceId !== undefined) {
+        const matrix = new THREE.Matrix4();
+        hit.object.getMatrixAt(hit.instanceId, matrix);
+        hitPos.setFromMatrixPosition(matrix);
+      } else if (hit.object instanceof THREE.Mesh) {
+        hitPos.copy(hit.object.position);
+      }
+
+      let closest: GeoEvent | null = null;
+      let minDist = Infinity;
+      for (const ev of latestEvents) {
+        const phi = (90 - ev.latitude) * Math.PI / 180;
+        const theta = (ev.longitude + 180) * Math.PI / 180;
+        const ex = -2.01 * Math.sin(phi) * Math.cos(theta);
+        const ey = 2.01 * Math.cos(phi);
+        const ez = 2.01 * Math.sin(phi) * Math.sin(theta);
+        const d = hitPos.distanceTo(new THREE.Vector3(ex, ey, ez));
+        if (d < minDist) { minDist = d; closest = ev; }
+      }
+      if (closest) {
+        popup.show(closest, event.clientX, event.clientY);
+      }
+      return;
+    }
+  }
+  popup.hide();
+});
+
+createCountryBorders().then(group => {
+  bordersGroup = group;
+  scene.add(group);
+});
+
+async function fetchAndDisplayEarthquakes() {
+  try {
+    const params: Record<string, string> = { type: 'earthquake', limit: '200' };
+    if (filterState.minMag) params.min_mag = filterState.minMag;
+    if (filterState.maxMag) params.max_mag = filterState.maxMag;
+    if (filterState.dateFrom) params.from = filterState.dateFrom + 'T00:00:00Z';
+    if (filterState.dateTo) params.to = filterState.dateTo + 'T23:59:59Z';
+    const res = await api.getEvents(params);
+    latestEvents = res.data;
+    if (markersGroup) {
+      scene.remove(markersGroup);
+      markersGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+    }
+    markersGroup = createEarthquakeMarkers(res.data);
+    scene.add(markersGroup);
+
+    if (heatmapGroup) {
+      scene.remove(heatmapGroup);
+      heatmapGroup.geometry.dispose();
+      if (Array.isArray(heatmapGroup.material)) {
+        heatmapGroup.material.forEach(m => m.dispose());
+      } else {
+        heatmapGroup.material.dispose();
+      }
+    }
+    if (res.data.length > 0) {
+      const tex = createHeatmapTexture(res.data);
+      heatmapGroup = createHeatmapOverlay(tex);
+      heatmapGroup.visible = layerControls.find(c => c.id === 'heatmap')?.visible ?? false;
+      scene.add(heatmapGroup);
+    }
+  } catch {
+    console.warn('Failed to fetch earthquake data – API may not be available yet');
+  }
+}
+
+fetchAndDisplayEarthquakes();
+setInterval(fetchAndDisplayEarthquakes, 30000);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// Admin status
+const adminPanel = createAdminPanel(() => {
+  return { layers: [] };
+});
+document.body.appendChild(adminPanel);
+
+async function refreshAdminStatus() {
+  try {
+    const res = await api.getLayers();
+    adminPanel.replaceWith(createAdminPanel(() => ({
+      layers: (res as any).data?.map((l: any) => ({
+        type: l.type,
+        enabled: l.enabled,
+        lastSync: l.last_sync
+      })) || []
+    })));
+    document.body.appendChild(adminPanel);
+  } catch {}
+}
+refreshAdminStatus();
+setInterval(refreshAdminStatus, 60000);
+
 window.addEventListener('resize', () => {
-	camera.aspect = window.innerWidth / window.innerHeight;
-	camera.updateProjectionMatrix();
-	renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 animate();
