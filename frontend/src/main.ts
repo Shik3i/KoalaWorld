@@ -11,6 +11,9 @@ import { createPlateBoundaries } from './layers/plate_boundaries';
 import { createRippleEffect, flashMarker } from './layers/effects';
 import { wildfirePlugin } from './layers/wildfire';
 import { weatherPlugin } from './layers/weather';
+import { airQualityPlugin } from './layers/air_quality';
+import { issPlugin } from './layers/iss';
+import { marinePlugin } from './layers/marine';
 import {
   createSidebar,
   createEventPanel,
@@ -104,6 +107,9 @@ function rotateGlobeTo(lat: number, lng: number) {
 let markersGroup: THREE.Group | null = null;
 let wildfireGroup: THREE.Group | null = null;
 let weatherGroup: THREE.Group | null = null;
+let airQualityGroup: THREE.Group | null = null;
+let issGroup: THREE.Group | null = null;
+let marineGroup: THREE.Group | null = null;
 let bordersGroup: THREE.Group | null = null;
 let heatmapGroup: THREE.Mesh | null = null;
 let latestEvents: GeoEvent[] = [];
@@ -113,6 +119,9 @@ const layerControls: LayerState[] = [
   { id: 'earthquakes', label: 'Earthquakes', visible: true },
   { id: 'wildfire', label: 'Wildfires', visible: false },
   { id: 'weather', label: 'Weather', visible: false },
+  { id: 'air_quality', label: 'Air Quality', visible: false },
+  { id: 'iss', label: 'ISS', visible: false },
+  { id: 'marine', label: 'Marine', visible: false },
   { id: 'grid', label: 'Grid', visible: true },
   { id: 'borders', label: 'Country Borders', visible: true },
   { id: 'heatmap', label: 'Heatmap', visible: false },
@@ -130,6 +139,15 @@ function onLayerToggle(id: string, visible: boolean) {
     case 'weather':
       if (weatherGroup) weatherGroup.visible = visible;
       break;
+    case 'air_quality':
+      if (airQualityGroup) airQualityGroup.visible = visible;
+      break;
+    case 'iss':
+      if (issGroup) issGroup.visible = visible;
+      break;
+    case 'marine':
+      if (marineGroup) marineGroup.visible = visible;
+      break;
     case 'grid':
       gridGroup.visible = visible;
       break;
@@ -137,7 +155,14 @@ function onLayerToggle(id: string, visible: boolean) {
       if (bordersGroup) bordersGroup.visible = visible;
       break;
     case 'heatmap':
-      if (heatmapGroup) heatmapGroup.visible = visible;
+      if (visible && !heatmapGroup && latestEvents.length > 0) {
+        const tex = createHeatmapTexture(latestEvents);
+        heatmapGroup = createHeatmapOverlay(tex);
+        heatmapGroup.visible = true;
+        worldGroup.add(heatmapGroup);
+      } else if (heatmapGroup) {
+        heatmapGroup.visible = visible;
+      }
       break;
     case 'plates':
       plateGroup.visible = visible;
@@ -388,8 +413,14 @@ function onGlobeClick(event: MouseEvent) {
     group.traverse((child) => { if (child instanceof THREE.Mesh) meshes.push(child); });
     const intersects = raycaster.intersectObjects(meshes);
     if (intersects.length > 0) {
-      const hitPos = getIntersectHitPos(intersects[0]);
-      const closest = findClosestEvent(hitPos);
+      const hit = intersects[0];
+      let closest: GeoEvent | null = null;
+      if (hit.object.userData?.event) {
+        closest = hit.object.userData.event as GeoEvent;
+      } else {
+        const hitPos = getIntersectHitPos(hit);
+        closest = findClosestEvent(hitPos);
+      }
       if (closest) {
         infoPanel.show(closest);
         const mag = closest.magnitude ?? 0;
@@ -408,6 +439,9 @@ function onGlobeClick(event: MouseEvent) {
   if (checkGroup(markersGroup)) return;
   if (checkGroup(wildfireGroup)) return;
   if (checkGroup(weatherGroup)) return;
+  if (checkGroup(airQualityGroup)) return;
+  if (checkGroup(issGroup)) return;
+  if (checkGroup(marineGroup)) return;
   infoPanel.hide();
 }
 
@@ -418,8 +452,12 @@ createCountryBorders().then(group => {
   worldGroup.add(group);
 });
 
-function buildQueryParams(): Record<string, string> {
-  const params: Record<string, string> = { type: 'earthquake' };
+function buildQueryParams(eventType?: string): Record<string, string> {
+  const params: Record<string, string> = {};
+
+  if (eventType) {
+    params.type = eventType;
+  }
 
   switch (currentMode) {
     case 'live':
@@ -427,7 +465,7 @@ function buildQueryParams(): Record<string, string> {
       break;
     case 'top':
       params.limit = '500';
-      params.min_mag = '6';
+      if (eventType === 'earthquake') params.min_mag = '6';
       break;
     case 'today': {
       const today = new Date().toISOString().slice(0, 10);
@@ -451,8 +489,10 @@ function buildQueryParams(): Record<string, string> {
     }
   }
 
-  if (filterState.minMag) params.min_mag = filterState.minMag;
-  if (filterState.maxMag) params.max_mag = filterState.maxMag;
+  if (eventType === 'earthquake') {
+    if (filterState.minMag) params.min_mag = filterState.minMag;
+    if (filterState.maxMag) params.max_mag = filterState.maxMag;
+  }
   if (filterState.dateFrom) {
     params.from = filterState.dateFrom + 'T00:00:00Z';
   }
@@ -466,7 +506,7 @@ function buildQueryParams(): Record<string, string> {
 async function fetchAndDisplayEarthquakes() {
   try {
     loading.show();
-    const params = buildQueryParams();
+    const params = buildQueryParams('earthquake');
     const res = await api.getEvents(params);
     const eventsChanged = hasDataChanged(res.data, latestEvents);
     latestEvents = res.data;
@@ -485,8 +525,7 @@ async function fetchAndDisplayEarthquakes() {
       markersGroup.visible = layerControls.find(c => c.id === 'earthquakes')?.visible ?? true;
       worldGroup.add(markersGroup);
 
-      const heatmapVisible = layerControls.find(c => c.id === 'heatmap')?.visible ?? false;
-      if (res.data.length > 0 && heatmapVisible) {
+      if (res.data.length > 0) {
         if (heatmapGroup) {
           worldGroup.remove(heatmapGroup);
           const mat = Array.isArray(heatmapGroup.material) ? heatmapGroup.material[0] : heatmapGroup.material;
@@ -500,7 +539,7 @@ async function fetchAndDisplayEarthquakes() {
         }
         const tex = createHeatmapTexture(res.data);
         heatmapGroup = createHeatmapOverlay(tex);
-        heatmapGroup.visible = heatmapVisible;
+        heatmapGroup.visible = layerControls.find(c => c.id === 'heatmap')?.visible ?? false;
         worldGroup.add(heatmapGroup);
       }
     }
@@ -572,7 +611,8 @@ function hasDataChanged(newEvents: GeoEvent[], oldEvents: GeoEvent[]): boolean {
 
 async function fetchAndDisplayWildfires() {
   try {
-    const events = await wildfirePlugin.fetchEvents({ limit: '5000' });
+    loading.show();
+    const events = await wildfirePlugin.fetchEvents(buildQueryParams('wildfire'));
     const wfCtrl = layerControls.find(c => c.id === 'wildfire');
     if (wfCtrl) wfCtrl.count = events.length;
     (sidebar as any).updateLayerCounts?.();
@@ -584,14 +624,27 @@ async function fetchAndDisplayWildfires() {
     wildfireGroup = wildfirePlugin.createMarkers(events, camera.position.length());
     wildfireGroup.visible = layerControls.find(c => c.id === 'wildfire')?.visible ?? false;
     worldGroup.add(wildfireGroup);
+
+    loading.hide();
+
+    if (events.length === 0) {
+      hideEmptyToast();
+      showEmptyToast('No wildfire data available');
+    } else {
+      hideEmptyToast();
+    }
   } catch {
     console.warn('Failed to fetch wildfire data');
+    loading.hide();
+    hideEmptyToast();
+    showEmptyToast('Wildfire API error');
   }
 }
 
 async function fetchAndDisplayWeather() {
   try {
-    const events = await weatherPlugin.fetchEvents({ limit: '200' });
+    loading.show();
+    const events = await weatherPlugin.fetchEvents(buildQueryParams('weather'));
     const weCtrl = layerControls.find(c => c.id === 'weather');
     if (weCtrl) weCtrl.count = events.length;
     (sidebar as any).updateLayerCounts?.();
@@ -603,15 +656,116 @@ async function fetchAndDisplayWeather() {
     weatherGroup = weatherPlugin.createMarkers(events, camera.position.length());
     weatherGroup.visible = layerControls.find(c => c.id === 'weather')?.visible ?? false;
     worldGroup.add(weatherGroup);
+
+    loading.hide();
+
+    if (events.length === 0) {
+      hideEmptyToast();
+      showEmptyToast('No weather data available');
+    } else {
+      hideEmptyToast();
+    }
   } catch {
     console.warn('Failed to fetch weather data');
+    loading.hide();
+    hideEmptyToast();
+    showEmptyToast('Weather API error');
+  }
+}
+
+async function fetchAndDisplayAirQuality() {
+  try {
+    loading.show();
+    const events = await airQualityPlugin.fetchEvents(buildQueryParams('air_quality'));
+    const aqCtrl = layerControls.find(c => c.id === 'air_quality');
+    if (aqCtrl) aqCtrl.count = events.length;
+    (sidebar as any).updateLayerCounts?.();
+
+    if (airQualityGroup) {
+      worldGroup.remove(airQualityGroup);
+      disposeGroup(airQualityGroup);
+    }
+    airQualityGroup = airQualityPlugin.createMarkers(events, camera.position.length());
+    airQualityGroup.visible = layerControls.find(c => c.id === 'air_quality')?.visible ?? false;
+    worldGroup.add(airQualityGroup);
+
+    loading.hide();
+
+    if (events.length === 0) {
+      hideEmptyToast();
+      showEmptyToast('No air quality data available');
+    } else {
+      hideEmptyToast();
+    }
+  } catch {
+    console.warn('Failed to fetch air quality data');
+    loading.hide();
+    hideEmptyToast();
+    showEmptyToast('Air quality API error');
+  }
+}
+
+async function fetchAndDisplayISS() {
+  try {
+    const events = await issPlugin.fetchEvents(buildQueryParams('iss'));
+    const issCtrl = layerControls.find(c => c.id === 'iss');
+    if (issCtrl) issCtrl.count = events.length;
+    (sidebar as any).updateLayerCounts?.();
+
+    if (issGroup) {
+      worldGroup.remove(issGroup);
+      disposeGroup(issGroup);
+    }
+    issGroup = issPlugin.createMarkers(events, camera.position.length());
+    issGroup.visible = layerControls.find(c => c.id === 'iss')?.visible ?? false;
+    worldGroup.add(issGroup);
+  } catch {
+    console.warn('Failed to fetch ISS data');
+  }
+}
+
+async function fetchAndDisplayMarine() {
+  try {
+    loading.show();
+    const events = await marinePlugin.fetchEvents(buildQueryParams('marine'));
+    const maCtrl = layerControls.find(c => c.id === 'marine');
+    if (maCtrl) maCtrl.count = events.length;
+    (sidebar as any).updateLayerCounts?.();
+
+    if (marineGroup) {
+      worldGroup.remove(marineGroup);
+      disposeGroup(marineGroup);
+    }
+    marineGroup = marinePlugin.createMarkers(events, camera.position.length());
+    marineGroup.visible = layerControls.find(c => c.id === 'marine')?.visible ?? false;
+    worldGroup.add(marineGroup);
+
+    loading.hide();
+
+    if (events.length === 0) {
+      hideEmptyToast();
+      showEmptyToast('No marine data available');
+    } else {
+      hideEmptyToast();
+    }
+  } catch {
+    console.warn('Failed to fetch marine data');
+    loading.hide();
+    hideEmptyToast();
+    showEmptyToast('Marine API error');
   }
 }
 
 fetchAndDisplayWildfires();
 fetchAndDisplayWeather();
+fetchAndDisplayAirQuality();
+fetchAndDisplayISS();
+fetchAndDisplayMarine();
 const wildfireInterval = setInterval(fetchAndDisplayWildfires, 5 * 60 * 1000);
 const weatherInterval = setInterval(fetchAndDisplayWeather, 5 * 60 * 1000);
+const airQualityInterval = setInterval(fetchAndDisplayAirQuality, 5 * 60 * 1000);
+const issInterval = setInterval(fetchAndDisplayISS, 10000);
+const marineInterval = setInterval(fetchAndDisplayMarine, 5 * 60 * 1000);
 
 const clock = new THREE.Clock();
 
@@ -628,6 +782,10 @@ function animate() {
 
   if (wildfireGroup && wildfirePlugin.updateAnimation) {
     wildfirePlugin.updateAnimation(wildfireGroup, time, delta);
+  }
+
+  if (issGroup && issPlugin.updateAnimation) {
+    issPlugin.updateAnimation(issGroup, time, delta);
   }
 
   const currentDist = camera.position.length();
@@ -697,6 +855,9 @@ export function dispose() {
   clearInterval(earthquakeInterval);
   clearInterval(wildfireInterval);
   clearInterval(weatherInterval);
+  clearInterval(airQualityInterval);
+  clearInterval(issInterval);
+  clearInterval(marineInterval);
   clearInterval(adminInterval);
   monitor.stop();
 }

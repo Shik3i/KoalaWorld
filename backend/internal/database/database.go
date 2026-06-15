@@ -88,7 +88,7 @@ func migrate(db *sql.DB) error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS layers (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		type TEXT NOT NULL UNIQUE CHECK(type IN ('earthquake', 'wildfire', 'weather')),
+		type TEXT NOT NULL UNIQUE CHECK(type IN ('earthquake', 'wildfire', 'weather', 'air_quality', 'iss', 'marine')),
 		enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
 		last_sync_at TEXT,
 		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ'))
@@ -96,7 +96,7 @@ func migrate(db *sql.DB) error {
 
 	CREATE TABLE IF NOT EXISTS events (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		type TEXT NOT NULL CHECK(type IN ('earthquake', 'wildfire', 'weather')),
+		type TEXT NOT NULL CHECK(type IN ('earthquake', 'wildfire', 'weather', 'air_quality', 'iss', 'marine')),
 		external_id TEXT NOT NULL,
 		source TEXT NOT NULL,
 		updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ')),
@@ -135,6 +135,9 @@ func seed(db *sql.DB) error {
 		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('earthquake', 1);
 		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('wildfire', 0);
 		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('weather', 0);
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('air_quality', 0);
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('iss', 0);
+		INSERT OR IGNORE INTO layers (type, enabled) VALUES ('marine', 0);
 	`)
 	if err != nil {
 		return err

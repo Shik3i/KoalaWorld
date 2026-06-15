@@ -23,8 +23,8 @@ func TestOpenAndMigrate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layers table query error = %v", err)
 	}
-	if count != 3 {
-		t.Errorf("expected 3 layers, got %d", count)
+	if count != 6 {
+		t.Errorf("expected 6 layers, got %d", count)
 	}
 
 	err = db.QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
@@ -194,8 +194,8 @@ func TestGetLayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLayers() error = %v", err)
 	}
-	if len(layers) != 3 {
-		t.Errorf("expected 3 layers, got %d", len(layers))
+	if len(layers) != 6 {
+		t.Errorf("expected 6 layers, got %d", len(layers))
 	}
 
 	// Check earthquake is enabled, others are disabled
@@ -205,7 +205,7 @@ func TestGetLayers(t *testing.T) {
 			if !l.Enabled {
 				t.Error("expected earthquake to be enabled")
 			}
-		case "wildfire", "weather":
+		case "wildfire", "weather", "air_quality", "iss", "marine":
 			if l.Enabled {
 				t.Errorf("expected %s to be disabled", l.Type)
 			}

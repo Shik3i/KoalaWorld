@@ -219,19 +219,15 @@ export function createSidebar(
         toggle.appendChild(badge);
       }
 
-      if (layer.count === 0) {
-        toggle.addEventListener('click', (e) => e.preventDefault());
-      } else {
-        toggle.addEventListener('click', () => {
-          const newVisible = !track.classList.contains('active');
-          if (newVisible) {
-            track.classList.add('active');
-          } else {
-            track.classList.remove('active');
-          }
-          callbacks.onLayerToggle(layer.id, newVisible);
-        });
-      }
+      toggle.addEventListener('click', () => {
+        const newVisible = !track.classList.contains('active');
+        if (newVisible) {
+          track.classList.add('active');
+        } else {
+          track.classList.remove('active');
+        }
+        callbacks.onLayerToggle(layer.id, newVisible);
+      });
 
       layersSection.appendChild(toggle);
     }

@@ -8,6 +8,9 @@ const (
 	EventTypeEarthquake EventType = "earthquake"
 	EventTypeWildfire   EventType = "wildfire"
 	EventTypeWeather    EventType = "weather"
+	EventTypeAirQuality EventType = "air_quality"
+	EventTypeISS        EventType = "iss"
+	EventTypeMarine     EventType = "marine"
 )
 
 type EventRecord struct {

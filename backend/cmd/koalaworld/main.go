@@ -37,6 +37,9 @@ func main() {
 	sched.Register(plugin.NewEarthquakePlugin(db))
 	sched.Register(plugin.NewWildfirePlugin(db))
 	sched.Register(plugin.NewWeatherPlugin(db))
+	sched.Register(plugin.NewAirQualityPlugin(db))
+	sched.Register(plugin.NewISSPlugin(db))
+	sched.Register(plugin.NewMarinePlugin(db))
 	sched.Start(context.Background())
 
 	// Register handlers.

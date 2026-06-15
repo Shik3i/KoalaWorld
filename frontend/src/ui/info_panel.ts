@@ -280,6 +280,17 @@ export function createInfoPanel(): { element: HTMLElement; show: (event: GeoEven
             <span class="ip-detail-key">Source</span>
             <span class="ip-detail-value">${escapeHtml(source)}</span>
           </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Latitude</span>
+            <span class="ip-detail-value">${lat}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Longitude</span>
+            <span class="ip-detail-value">${lng}</span>
+          </div>
+        </div>
+        <div class="ip-actions">
+          <button class="ip-copy-btn" id="kw-copy-link">📋 Copy coordinates</button>
         </div>
       `;
     } else if (event.type === 'wildfire') {
@@ -319,6 +330,147 @@ export function createInfoPanel(): { element: HTMLElement; show: (event: GeoEven
             <span class="ip-detail-key">Source</span>
             <span class="ip-detail-value">${escapeHtml(source)}</span>
           </div>
+        </div>
+        <div class="ip-actions">
+          <button class="ip-copy-btn" id="kw-copy-link">📋 Copy coordinates</button>
+        </div>
+      `;
+    } else if (event.type === 'air_quality') {
+      const city = (meta?.city as string) || 'Unknown';
+      const euAQI = meta?.european_aqi as number | undefined;
+      const usAQI = meta?.us_aqi as number | undefined;
+      const pm25 = meta?.pm2_5 as number | undefined;
+      const pm10 = meta?.pm10 as number | undefined;
+      const ozone = meta?.ozone as number | undefined;
+      const no2 = meta?.nitrogen_dioxide as number | undefined;
+
+      bodyHtml = `
+        <h3 class="ip-place">${escapeHtml(city)}</h3>
+        <div class="ip-mag-row">
+          <span class="kw-badge ${euAQI != null && euAQI > 60 ? 'kw-badge-severe' : euAQI != null && euAQI > 40 ? 'kw-badge-high' : euAQI != null && euAQI > 20 ? 'kw-badge-medium' : 'kw-badge-low'} ip-mag-badge">${euAQI != null ? euAQI.toFixed(0) : 'N/A'}</span>
+          <span class="ip-mag-label">European AQI</span>
+        </div>
+        <div class="ip-details">
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">US AQI</span>
+            <span class="ip-detail-value">${usAQI != null ? usAQI.toFixed(0) : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">PM2.5</span>
+            <span class="ip-detail-value">${pm25 != null ? pm25.toFixed(1) + ' µg/m³' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">PM10</span>
+            <span class="ip-detail-value">${pm10 != null ? pm10.toFixed(1) + ' µg/m³' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Ozone</span>
+            <span class="ip-detail-value">${ozone != null ? ozone.toFixed(1) + ' µg/m³' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">NO₂</span>
+            <span class="ip-detail-value">${no2 != null ? no2.toFixed(1) + ' µg/m³' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Latitude</span>
+            <span class="ip-detail-value">${lat}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Longitude</span>
+            <span class="ip-detail-value">${lng}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Source</span>
+            <span class="ip-detail-value">${escapeHtml(source)}</span>
+          </div>
+        </div>
+        <div class="ip-actions">
+          <button class="ip-copy-btn" id="kw-copy-link">📋 Copy coordinates</button>
+        </div>
+      `;
+    } else if (event.type === 'iss') {
+      const name = (meta?.name as string) || 'ISS';
+      const altitude = meta?.altitude as number | undefined;
+      const velocity = meta?.velocity as number | undefined;
+
+      bodyHtml = `
+        <h3 class="ip-place">${escapeHtml(name)}</h3>
+        <div class="ip-mag-row">
+          <span class="kw-badge kw-badge-medium ip-mag-badge ip-mag-medium">●</span>
+          <span class="ip-mag-label">Live</span>
+        </div>
+        <div class="ip-details">
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Altitude</span>
+            <span class="ip-detail-value">${altitude != null ? altitude.toFixed(1) + ' km' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Velocity</span>
+            <span class="ip-detail-value">${velocity != null ? velocity.toFixed(1) + ' km/h' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Latitude</span>
+            <span class="ip-detail-value">${lat}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Longitude</span>
+            <span class="ip-detail-value">${lng}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Source</span>
+            <span class="ip-detail-value">${escapeHtml(source)}</span>
+          </div>
+        </div>
+        <div class="ip-actions">
+          <button class="ip-copy-btn" id="kw-copy-link">📋 Copy coordinates</button>
+        </div>
+      `;
+    } else if (event.type === 'marine') {
+      const city = (meta?.city as string) || 'Unknown';
+      const waveHeight = meta?.wave_height as number | undefined;
+      const waveDir = meta?.wave_direction as number | undefined;
+      const swellHeight = meta?.swell_wave_height as number | undefined;
+      const swellDir = meta?.swell_wave_direction as number | undefined;
+      const seaTemp = meta?.sea_surface_temperature as number | undefined;
+
+      bodyHtml = `
+        <h3 class="ip-place">${escapeHtml(city)}</h3>
+        <div class="ip-mag-row">
+          <span class="kw-badge ${(waveHeight ?? 0) > 3 ? 'kw-badge-severe' : (waveHeight ?? 0) > 1.5 ? 'kw-badge-high' : 'kw-badge-medium'} ip-mag-badge">${waveHeight != null ? waveHeight.toFixed(1) + 'm' : 'N/A'}</span>
+          <span class="ip-mag-label">Wave Height</span>
+        </div>
+        <div class="ip-details">
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Wave Dir</span>
+            <span class="ip-detail-value">${waveDir != null ? waveDir.toFixed(0) + '°' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Swell Height</span>
+            <span class="ip-detail-value">${swellHeight != null ? swellHeight.toFixed(1) + 'm' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Swell Dir</span>
+            <span class="ip-detail-value">${swellDir != null ? swellDir.toFixed(0) + '°' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Sea Temp</span>
+            <span class="ip-detail-value">${seaTemp != null ? seaTemp.toFixed(1) + '°C' : 'N/A'}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Latitude</span>
+            <span class="ip-detail-value">${lat}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Longitude</span>
+            <span class="ip-detail-value">${lng}</span>
+          </div>
+          <div class="ip-detail-row">
+            <span class="ip-detail-key">Source</span>
+            <span class="ip-detail-value">${escapeHtml(source)}</span>
+          </div>
+        </div>
+        <div class="ip-actions">
+          <button class="ip-copy-btn" id="kw-copy-link">📋 Copy coordinates</button>
         </div>
       `;
     } else {

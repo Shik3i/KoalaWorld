@@ -101,11 +101,10 @@ func TestWildfireFetchNoAPIKey(t *testing.T) {
 	plugin := NewWildfirePlugin(nil)
 	records, err := plugin.Fetch(context.Background())
 	if err != nil {
-		t.Errorf("Fetch() without API key should return nil, got error: %v", err)
+		t.Errorf("Fetch() without API key should not error, got: %v", err)
 	}
-	if records != nil {
-		t.Errorf("expected nil records, got %d", len(records))
-	}
+	// May return EONET records as free fallback; accept 0 or more
+	t.Logf("Got %d wildfire records via fallback", len(records))
 }
 
 func TestWeatherNormalize(t *testing.T) {

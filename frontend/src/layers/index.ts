@@ -6,4 +6,7 @@ export { createPlateBoundaries } from './plate_boundaries';
 export { createRippleEffect, flashMarker } from './effects';
 export { wildfirePlugin } from './wildfire';
 export { weatherPlugin } from './weather';
+export { airQualityPlugin } from './air_quality';
+export { issPlugin } from './iss';
+export { marinePlugin } from './marine';
 export type { LayerPlugin } from './plugin';

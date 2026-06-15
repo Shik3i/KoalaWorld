@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 const RADIUS = 2.02;
-const SEGMENTS_PER_DEGREE = 2;
 
 const PLATE_BOUNDARIES: [number, number][][] = [
   // San Andreas Fault (Pacific-North American)
@@ -81,43 +80,40 @@ function latLngToPosition(lat: number, lng: number): THREE.Vector3 {
 export function createPlateBoundaries(): THREE.Group {
   const group = new THREE.Group();
 
-  const positions: number[] = [];
-
   for (const segment of PLATE_BOUNDARIES) {
-    for (let i = 0; i < segment.length - 1; i++) {
-      const [lng1, lat1] = segment[i];
-      const [lng2, lat2] = segment[i + 1];
+    if (segment.length < 2) continue;
 
-      const stepCount = Math.max(1, Math.round(
-        Math.sqrt((lat2 - lat1) ** 2 + (lng2 - lng1) ** 2) * SEGMENTS_PER_DEGREE
-      ));
+    const points: THREE.Vector3[] = [];
 
+    for (let i = 0; i < segment.length; i++) {
+      const [lng, lat] = segment[i];
+      points.push(latLngToPosition(lat, lng));
+    }
+
+    const subdivided: THREE.Vector3[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const stepCount = Math.max(3, Math.round(p1.distanceTo(p2) * 8));
       for (let s = 0; s < stepCount; s++) {
-        const t1 = s / stepCount;
-        const t2 = (s + 1) / stepCount;
-        const latA = lat1 + (lat2 - lat1) * t1;
-        const lngA = lng1 + (lng2 - lng1) * t1;
-        const latB = lat1 + (lat2 - lat1) * t2;
-        const lngB = lng1 + (lng2 - lng1) * t2;
-
-        const a = latLngToPosition(latA, lngA);
-        const b = latLngToPosition(latB, lngB);
-        positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        const t = s / stepCount;
+        const v = new THREE.Vector3().lerpVectors(p1, p2, t);
+        subdivided.push(v);
       }
     }
-  }
+    subdivided.push(points[points.length - 1]);
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  const mat = new THREE.LineBasicMaterial({
-    color: 0x44aaff,
-    transparent: true,
-    opacity: 0.15,
-    depthTest: true,
-    depthWrite: false,
-  });
-  const lines = new THREE.LineSegments(geo, mat);
-  group.add(lines);
+    const geo = new THREE.BufferGeometry().setFromPoints(subdivided);
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x44aaff,
+      transparent: true,
+      opacity: 0.3,
+      depthTest: true,
+      depthWrite: false,
+    });
+    const line = new THREE.Line(geo, mat);
+    group.add(line);
+  }
 
   return group;
 }
