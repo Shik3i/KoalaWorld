@@ -5,7 +5,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM golang:1.26-alpine AS backend-builder
+FROM golang:1.26.5-alpine AS backend-builder
 WORKDIR /app
 COPY backend/ ./
 RUN CGO_ENABLED=0 go build -o /koalaworld ./cmd/koalaworld
