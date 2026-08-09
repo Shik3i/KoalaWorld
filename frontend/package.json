@@ -26,6 +26,8 @@
     "topojson-client": "^3.1.0"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3",
     "@types/three": "^0.184.1",
     "@types/topojson-client": "^3.1.5",
     "typescript": "^6.0.3",
