@@ -126,7 +126,7 @@ jobs:
           echo "" >> $GITHUB_OUTPUT
           echo "### Changes" >> $GITHUB_OUTPUT
           echo "- See the [commit log](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) for details." >> $GITHUB_OUTPUT
-          EOF
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
